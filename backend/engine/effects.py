@@ -138,6 +138,26 @@ def ability_accelerate_energy(ctx: EffectContext) -> None:
         )
 
 
+@effect("ability_tandem_unit")
+def ability_tandem_unit(ctx: EffectContext) -> None:
+    """Search the deck for up to 2 Basic Pokémon and put them on the Bench
+    (e.g. Miraidon ex 'Tandem Unit'). Powers all-Basic aggro openings."""
+    placed = 0
+    for card in list(ctx.player.deck):
+        if placed >= 2 or not ctx.player.bench_has_space():
+            break
+        if card.card.is_basic_pokemon:
+            ctx.player.deck.remove(card)
+            card.turn_played = ctx.engine.state.turn_number
+            card.summoning_sick = True
+            card.can_evolve_this_turn = False
+            ctx.player.bench.append(card)
+            placed += 1
+    if placed:
+        ctx.player.shuffle_deck(ctx.engine.rng)
+        ctx.engine.log(f"Tandem Unit benched {placed} Basic Pokémon.")
+
+
 # --------------------------------------------------------------------------- #
 # Trainer effects
 # --------------------------------------------------------------------------- #

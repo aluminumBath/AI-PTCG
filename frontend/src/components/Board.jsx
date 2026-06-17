@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 const TYPE_VAR = {
   Fire: 'var(--fire)', Water: 'var(--water)', Grass: 'var(--grass)',
   Psychic: 'var(--psychic)', Lightning: 'var(--lightning)', Metal: 'var(--metal)',
@@ -18,14 +20,31 @@ function Gauge({ remaining, max }) {
   );
 }
 
+function CardArt({ src, alt }) {
+  const [ok, setOk] = useState(true);
+  if (!src || !ok) return null;
+  return <img className="poke-art" src={src} alt={alt} loading="lazy" onError={() => setOk(false)} />;
+}
+
 function Poke({ poke, isActive }) {
   if (!poke) {
     return <div className="empty-slot">empty</div>;
   }
   const name = poke.name.replace(/ ex$/, '');
   const isEx = poke.rule_box;
+  const hasArt = !!poke.image;
   return (
-    <div className={`card-poke ${isActive ? 'act' : ''}`}>
+    <div className={`card-poke ${isActive ? 'act' : ''} ${hasArt ? 'has-art' : ''}`}>
+      {hasArt && (
+        <div className="art-wrap">
+          <CardArt src={poke.image} alt={poke.name} />
+          {poke.status?.length > 0 && (
+            <div className="art-status">
+              {poke.status.map((s) => <span key={s} className={`status ${s}`}>{s}</span>)}
+            </div>
+          )}
+        </div>
+      )}
       <div className="nm">
         {name}{isEx && <span className="ex"> {poke.rule_box}</span>}
       </div>
@@ -41,7 +60,7 @@ function Poke({ poke, isActive }) {
           <span key={i} className={`pip ${t}`} title={t} />
         ))}
       </div>
-      {poke.status?.length > 0 && (
+      {!hasArt && poke.status?.length > 0 && (
         <div className="statuses">
           {poke.status.map((s) => <span key={s} className={`status ${s}`}>{s}</span>)}
         </div>

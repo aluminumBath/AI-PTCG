@@ -136,21 +136,32 @@ class GameEngine:
         s.turn_number += 1
         self._begin_turn()
 
-    def _between_turns(self, p: PlayerState) -> None:
-        """Apply Poison/Burn, then check Asleep/Paralyzed recovery."""
+    def _between_turns(self, ended_player: PlayerState) -> None:
+        """Pokémon Checkup (between turns).
+
+        Per the official rules this resolves Special Conditions on *both*
+        players' Active Pokémon: Poisoned (10), Burned (20 + coin flip to remove),
+        and Asleep (coin flip to wake). Paralysis is removed during the Checkup
+        that follows the affected player's own turn — i.e. for the player whose
+        turn just ended. Special Conditions only ever sit on the Active Pokémon.
+        """
         s = self.state
-        for poke in p.all_pokemon():
+        for pl in s.players:
+            poke = pl.active
+            if not poke:
+                continue
             if StatusCondition.POISONED in poke.status:
-                self.deal_raw_damage(poke, 10, p, source_status=True)
+                self.deal_raw_damage(poke, 10, pl, source_status=True)
             if StatusCondition.BURNED in poke.status:
-                self.deal_raw_damage(poke, 20, p, source_status=True)
+                self.deal_raw_damage(poke, 20, pl, source_status=True)
                 if self.rng.random() < 0.5:
                     poke.status.discard(StatusCondition.BURNED)
             if StatusCondition.ASLEEP in poke.status:
                 if self.rng.random() < 0.5:
                     poke.status.discard(StatusCondition.ASLEEP)
-            # Paralysis wears off at end of the affected player's next turn.
-            poke.status.discard(StatusCondition.PARALYZED)
+        # Paralysis wears off after the controller's own turn.
+        if ended_player.active:
+            ended_player.active.status.discard(StatusCondition.PARALYZED)
         self._cleanup_knockouts()
 
     # ------------------------------------------------------------------ #
@@ -172,13 +183,19 @@ class GameEngine:
         )
         active_asleep = p.active and StatusCondition.ASLEEP in p.active.status
 
+        # The player who goes first may neither attack nor evolve on turn 1.
+        first_turn_first_player = (
+            s.turn_number == 1 and p.index == s.first_player
+        )
+
         for i, card in enumerate(p.hand):
             cd = card.card
             # Play Basic to bench
             if cd.is_basic_pokemon and p.bench_has_space():
                 actions.append(Action(ActionType.PLAY_BASIC, hand_index=i))
-            # Evolve
-            if cd.is_pokemon and cd.evolves_from:
+            # Evolve (not on the first player's first turn, not the turn a
+            # Pokémon was played, and not the turn it already evolved).
+            if cd.is_pokemon and cd.evolves_from and not first_turn_first_player:
                 for tgt in p.all_pokemon():
                     if (
                         tgt.card.name == cd.evolves_from
@@ -221,9 +238,6 @@ class GameEngine:
                 )
 
         # Attacks (ends turn). First player cannot attack on turn 1.
-        first_turn_first_player = (
-            s.turn_number == 1 and p.index == s.first_player
-        )
         if (
             p.active
             and not active_paralyzed
@@ -490,6 +504,7 @@ class GameEngine:
         old = p.active
         p.active = new_active
         if old:
+            old.status = set()  # Special Conditions are removed when benched
             p.bench.append(old)
 
     def _resolve_effect(self, key, player, source=None, target=None, base_damage=0):

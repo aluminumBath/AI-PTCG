@@ -21,10 +21,30 @@ from engine.enums import (
     TrainerKind,
 )
 
+import re as _re
+from dataclasses import replace as _replace
+
 CATALOG: dict[str, CardDef] = {}
+
+# Pokémon card ids here are real pokemontcg.io ids (e.g. "sv3-125"), so the card
+# art can be served straight from the official image CDN. Only Pokémon appear on
+# the board, so only they need art (energy is shown as pips, trainers go to the
+# discard). The UI falls back gracefully if an image fails to load.
+_IMG_ID = _re.compile(r"^([a-z0-9]+)-([A-Za-z0-9]+)$")
+
+
+def _card_image(card_id: str) -> str:
+    m = _IMG_ID.match(card_id)
+    if not m:
+        return ""
+    return f"https://images.pokemontcg.io/{m.group(1)}/{m.group(2)}.png"
 
 
 def _reg(card: CardDef) -> CardDef:
+    if card.is_pokemon and not card.image:
+        url = _card_image(card.id)
+        if url:
+            card = _replace(card, image=url)
     CATALOG[card.id] = card
     return card
 
@@ -39,6 +59,18 @@ FIRE_ENERGY = _reg(CardDef(
 PSYCHIC_ENERGY = _reg(CardDef(
     id="energy-psychic", name="Psychic Energy", category=CardCategory.ENERGY,
     energy_type=E.PSYCHIC, is_basic_energy=True, provides=(E.PSYCHIC,),
+))
+LIGHTNING_ENERGY = _reg(CardDef(
+    id="energy-lightning", name="Lightning Energy", category=CardCategory.ENERGY,
+    energy_type=E.LIGHTNING, is_basic_energy=True, provides=(E.LIGHTNING,),
+))
+DARKNESS_ENERGY = _reg(CardDef(
+    id="energy-darkness", name="Darkness Energy", category=CardCategory.ENERGY,
+    energy_type=E.DARKNESS, is_basic_energy=True, provides=(E.DARKNESS,),
+))
+WATER_ENERGY = _reg(CardDef(
+    id="energy-water", name="Water Energy", category=CardCategory.ENERGY,
+    energy_type=E.WATER, is_basic_energy=True, provides=(E.WATER,),
 ))
 DOUBLE_TURBO = _reg(CardDef(
     id="energy-double-turbo", name="Double Turbo Energy", category=CardCategory.ENERGY,
@@ -156,11 +188,122 @@ POTION = _reg(CardDef(
 ))
 
 
+# --------------------------------------------------------------------------- #
+# Deck 3 — Miraidon ex (Lightning basic-aggro)
+# --------------------------------------------------------------------------- #
+WATTREL = _reg(CardDef(
+    id="sv2-81", name="Wattrel", category=CardCategory.POKEMON,
+    hp=70, types=(E.LIGHTNING,), stage=Stage.BASIC,
+    weakness=E.FIGHTING, retreat_cost=1,
+    attacks=(Attack(name="Peck", cost=(E.COLORLESS,), damage=20),),
+))
+MIRAIDON_EX = _reg(CardDef(
+    id="sv1-81", name="Miraidon ex", category=CardCategory.POKEMON,
+    hp=220, types=(E.LIGHTNING,), stage=Stage.BASIC,
+    weakness=E.FIGHTING, retreat_cost=1, rule_box="ex",
+    abilities=(Ability(name="Tandem Unit", effect_id="ability_tandem_unit",
+                       kind="activated",
+                       text="Search your deck for up to 2 Basic Pokémon and bench them."),),
+    attacks=(Attack(name="Photon Blaster", cost=(E.LIGHTNING, E.LIGHTNING, E.COLORLESS),
+                    damage=220, effect_id="discard_energy_self_2",
+                    text="220 damage. Discard 2 Energy from this Pokémon."),),
+))
+IRON_HANDS_EX = _reg(CardDef(
+    id="sv2-70", name="Iron Hands ex", category=CardCategory.POKEMON,
+    hp=230, types=(E.LIGHTNING,), stage=Stage.BASIC,
+    weakness=E.FIGHTING, retreat_cost=3, rule_box="ex",
+    attacks=(Attack(name="Amp You Very Much", cost=(E.LIGHTNING, E.LIGHTNING, E.COLORLESS),
+                    damage=160),),
+))
+
+# --------------------------------------------------------------------------- #
+# Deck 4 — Roaring Moon ex (Darkness basic-aggro)
+# --------------------------------------------------------------------------- #
+MURKROW = _reg(CardDef(
+    id="sv4-114", name="Murkrow", category=CardCategory.POKEMON,
+    hp=70, types=(E.DARKNESS,), stage=Stage.BASIC,
+    weakness=E.LIGHTNING, retreat_cost=1,
+    attacks=(Attack(name="Nasty Plot", cost=(E.DARKNESS,), damage=20,
+                    effect_id="poison_target", text="The Defending Pokémon is Poisoned."),),
+))
+DARKRAI_EX = _reg(CardDef(
+    id="sv4-135", name="Darkrai ex", category=CardCategory.POKEMON,
+    hp=220, types=(E.DARKNESS,), stage=Stage.BASIC,
+    weakness=E.GRASS, retreat_cost=1, rule_box="ex",
+    abilities=(Ability(name="Dark Embrace", effect_id="ability_accelerate_energy",
+                       kind="activated",
+                       text="Attach a Darkness Energy from discard to a Pokémon."),),
+    attacks=(Attack(name="Dark Prism", cost=(E.DARKNESS, E.COLORLESS, E.COLORLESS),
+                    damage=120),),
+))
+ROARING_MOON_EX = _reg(CardDef(
+    id="sv4-124", name="Roaring Moon ex", category=CardCategory.POKEMON,
+    hp=230, types=(E.DARKNESS,), stage=Stage.BASIC,
+    weakness=E.GRASS, retreat_cost=2, rule_box="ex",
+    attacks=(Attack(name="Calamity Storm", cost=(E.DARKNESS, E.DARKNESS, E.COLORLESS),
+                    damage=200, effect_id="bench_damage_2_all_opp",
+                    text="200 damage, and 20 to each of your opponent's Benched Pokémon."),),
+))
+
+
+# --------------------------------------------------------------------------- #
+# Deck 5 — Chien-Pao ex (Water energy-acceleration)
+# --------------------------------------------------------------------------- #
+WIGLETT = _reg(CardDef(
+    id="sv2-50", name="Wiglett", category=CardCategory.POKEMON,
+    hp=70, types=(E.WATER,), stage=Stage.BASIC,
+    weakness=E.GRASS, retreat_cost=1,
+    attacks=(Attack(name="Dig", cost=(E.WATER,), damage=20),),
+))
+CHIEN_PAO_EX = _reg(CardDef(
+    id="sv5-61", name="Chien-Pao ex", category=CardCategory.POKEMON,
+    hp=220, types=(E.WATER,), stage=Stage.BASIC,
+    weakness=E.LIGHTNING, retreat_cost=1, rule_box="ex",
+    abilities=(Ability(name="Shivery Chill", effect_id="ability_accelerate_energy",
+                       kind="activated",
+                       text="Attach a Water Energy from discard to a Pokémon."),),
+    attacks=(Attack(name="Hail Blade", cost=(E.WATER, E.WATER),
+                    damage=180, effect_id="discard_energy_self_2",
+                    text="180 damage. Discard 2 Energy from this Pokémon."),),
+))
+
+# --------------------------------------------------------------------------- #
+# Deck 6 — Iron Valiant ex (Psychic aggro)
+# --------------------------------------------------------------------------- #
+NATU = _reg(CardDef(
+    id="sv3-71", name="Natu", category=CardCategory.POKEMON,
+    hp=60, types=(E.PSYCHIC,), stage=Stage.BASIC,
+    weakness=E.DARKNESS, retreat_cost=1,
+    attacks=(Attack(name="Peck", cost=(E.PSYCHIC,), damage=20),),
+))
+IRON_VALIANT_EX = _reg(CardDef(
+    id="sv4-89", name="Iron Valiant ex", category=CardCategory.POKEMON,
+    hp=220, types=(E.PSYCHIC,), stage=Stage.BASIC,
+    weakness=E.METAL, retreat_cost=2, rule_box="ex",
+    attacks=(Attack(name="Tachyon Bits", cost=(E.PSYCHIC,), damage=50),
+             Attack(name="Laser Blade", cost=(E.PSYCHIC, E.PSYCHIC, E.COLORLESS),
+                    damage=180, effect_id="discard_energy_self_2",
+                    text="180 damage. Discard 2 Energy from this Pokémon."),),
+))
+
+
 def _deck(spec: list[tuple[CardDef, int]]) -> list[CardDef]:
+    """Build a deck, enforcing the official deck-construction rules:
+    exactly 60 cards, and at most 4 copies of any card *except* Basic Energy
+    (which is unlimited). Raises if a list is illegal so no rules-breaking deck
+    can ship."""
     out: list[CardDef] = []
     for card, n in spec:
+        if not card.is_basic_energy and n > 4:
+            raise ValueError(
+                f"{card.name}: {n} copies exceeds the 4-copy limit "
+                "(only Basic Energy is unlimited)."
+            )
         out.extend([card] * n)
-    assert len(out) == 60, f"deck must be 60 cards, got {len(out)}"
+    if len(out) != 60:
+        raise ValueError(f"deck must be 60 cards, got {len(out)}")
+    if not any(c.is_basic_pokemon for c in out):
+        raise ValueError("deck must contain at least one Basic Pokémon")
     return out
 
 
@@ -170,7 +313,7 @@ def charizard_deck() -> list[CardDef]:
         (PIDGEY, 3), (PIDGEOT_EX, 2),
         (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
         (SWITCH, 2), (POTION, 2),
-        (FIRE_ENERGY, 24), (DOUBLE_TURBO, 7),
+        (FIRE_ENERGY, 27), (DOUBLE_TURBO, 4),
     ])
 
 
@@ -180,11 +323,51 @@ def gardevoir_deck() -> list[CardDef]:
         (ZACIAN, 3),
         (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
         (SWITCH, 2), (POTION, 2),
-        (PSYCHIC_ENERGY, 25), (DOUBLE_TURBO, 7),
+        (PSYCHIC_ENERGY, 28), (DOUBLE_TURBO, 4),
+    ])
+
+
+def miraidon_deck() -> list[CardDef]:
+    return _deck([
+        (MIRAIDON_EX, 3), (IRON_HANDS_EX, 2), (WATTREL, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (LIGHTNING_ENERGY, 32), (DOUBLE_TURBO, 4),
+    ])
+
+
+def roaring_moon_deck() -> list[CardDef]:
+    return _deck([
+        (ROARING_MOON_EX, 3), (DARKRAI_EX, 2), (MURKROW, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (DARKNESS_ENERGY, 32), (DOUBLE_TURBO, 4),
+    ])
+
+
+def chien_pao_deck() -> list[CardDef]:
+    return _deck([
+        (CHIEN_PAO_EX, 4), (WIGLETT, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (WATER_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def iron_valiant_deck() -> list[CardDef]:
+    return _deck([
+        (IRON_VALIANT_EX, 4), (NATU, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (PSYCHIC_ENERGY, 33), (DOUBLE_TURBO, 4),
     ])
 
 
 DECKS = {
     "charizard_ex": charizard_deck,
     "gardevoir_ex": gardevoir_deck,
+    "miraidon_ex": miraidon_deck,
+    "roaring_moon_ex": roaring_moon_deck,
+    "chien_pao_ex": chien_pao_deck,
+    "iron_valiant_ex": iron_valiant_deck,
 }

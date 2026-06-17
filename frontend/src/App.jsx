@@ -6,21 +6,36 @@ import WatchMode from './components/WatchMode';
 import PlayMode from './components/PlayMode';
 import TrainingDashboard from './components/TrainingDashboard';
 import CardExplorer from './components/CardExplorer';
+import DeckImport from './components/DeckImport';
+import ModelArena from './components/ModelArena';
+import RulesFeed from './components/RulesFeed';
+import Competition from './components/Competition';
+import Submissions from './components/Submissions';
 import AdminPanel from './components/AdminPanel';
 
 const NAV = [
   { id: 'watch', label: 'Watch AI vs AI', group: 'Arena' },
   { id: 'play', label: 'Play vs AI', group: 'Arena' },
+  { id: 'import', label: 'Deck import', group: 'Build' },
+  { id: 'arena', label: 'Model arena', group: 'Intelligence' },
+  { id: 'submissions', label: 'Ladder', group: 'Intelligence' },
   { id: 'train', label: 'Training lab', group: 'Intelligence' },
-  { id: 'cards', label: 'Card explorer', group: 'Intelligence' },
+  { id: 'competition', label: 'Competition', group: 'Intelligence' },
+  { id: 'cards', label: 'Card explorer', group: 'Reference' },
+  { id: 'rules', label: 'Rules feed', group: 'Reference' },
 ];
 
 function Shell() {
   const { user, ready, logout } = useAuth();
   const [tab, setTab] = useState('watch');
   const [decks, setDecks] = useState([]);
+  const [models, setModels] = useState([]);
 
-  useEffect(() => { api.decks().then((r) => setDecks(r.decks)).catch(() => setDecks(['charizard_ex', 'gardevoir_ex'])); }, []);
+  const loadDecks = () => api.decks()
+    .then((r) => setDecks(r.decks))
+    .catch(() => setDecks(['charizard_ex', 'gardevoir_ex', 'miraidon_ex', 'roaring_moon_ex']));
+  useEffect(() => { loadDecks(); }, []);
+  useEffect(() => { api.agents().then((r) => setModels(r.models || [])).catch(() => setModels([])); }, []);
 
   if (!ready) return <div className="auth-wrap"><span className="spin" /></div>;
   if (!user) return <Login />;
@@ -68,10 +83,15 @@ function Shell() {
       </aside>
 
       <main className="main">
-        {tab === 'watch' && <WatchMode decks={decks} />}
-        {tab === 'play' && <PlayMode decks={decks} />}
+        {tab === 'watch' && <WatchMode decks={decks} agents={models} />}
+        {tab === 'play' && <PlayMode decks={decks} agents={models} />}
+        {tab === 'import' && <DeckImport onImported={() => { loadDecks(); }} />}
+        {tab === 'arena' && <ModelArena models={models} decks={decks} />}
+        {tab === 'submissions' && <Submissions />}
         {tab === 'train' && <TrainingDashboard />}
+        {tab === 'competition' && <Competition />}
         {tab === 'cards' && <CardExplorer />}
+        {tab === 'rules' && <RulesFeed />}
         {tab === 'admin' && user.is_admin && <AdminPanel />}
       </main>
     </div>

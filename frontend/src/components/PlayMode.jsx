@@ -1,15 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import Board from './Board';
+import ImageDisclaimer from './ImageDisclaimer';
 
-const AGENTS = [
-  { id: 'heuristic', label: 'Heuristic' },
-  { id: 'mcts', label: 'MCTS (search)' },
-  { id: 'rl', label: 'RL policy' },
-  { id: 'random', label: 'Random' },
-];
-
-export default function PlayMode({ decks }) {
+export default function PlayMode({ decks, agents }) {
+  const AGENTS = agents && agents.length ? agents
+    : [{ id: 'heuristic', label: 'Heuristic' }, { id: 'mcts', label: 'MCTS' }];
   const [cfg, setCfg] = useState({ deck_a: 'charizard_ex', deck_b: 'gardevoir_ex', agent_b: 'mcts' });
   const [game, setGame] = useState(null);
   const [state, setState] = useState(null);
@@ -42,6 +38,7 @@ export default function PlayMode({ decks }) {
 
   return (
     <div>
+      <ImageDisclaimer />
       <div className="page-head">
         <div className="eyebrow">Mode · Play</div>
         <h1>Play against the AI</h1>

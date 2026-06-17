@@ -48,5 +48,22 @@ export const api = {
 
   metrics: () => req('/api/training/metrics'),
   cards: (q, page = 1) => req(`/api/cards/search?q=${encodeURIComponent(q)}&page=${page}`),
+  cardsCatalog: () => req('/api/cards/catalog'),
+  rules: () => req('/api/rules'),
+  sources: () => req('/api/sources'),
+  competitionInfo: () => req('/api/competition/info'),
+  competitionReport: (body) => req('/api/competition/report', { method: 'POST', body }),
+  // ladder / submissions
+  submissionsList: () => req('/api/submissions'),
+  createSubmission: (body) => req('/api/submissions', { method: 'POST', body }),
+  submissionDetail: (id) => req(`/api/submissions/${id}`),
+  submissionExport: (id) => req(`/api/submissions/${id}/export`),
+  deleteSubmission: (id) => req(`/api/submissions/${id}`, { method: 'DELETE' }),
+  runEpisodes: (count) => req('/api/episodes/run', { method: 'POST', body: { count } }),
+  episodeStatus: (jobId) => req(`/api/episodes/status/${jobId}`),
+  importDeck: (name, list) => req('/api/decks/import', { method: 'POST', body: { name, list } }),
+  runTournament: (agents, decks, games_per_pairing) =>
+    req('/api/tournament/run', { method: 'POST', body: { agents, decks, games_per_pairing } }),
+  tournamentStatus: (jobId) => req(`/api/tournament/${jobId}`),
   adminUsers: () => req('/api/admin/users', { auth: true }),
 };

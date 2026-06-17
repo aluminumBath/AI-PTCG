@@ -2,13 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import Board from './Board';
-
-const AGENTS = [
-  { id: 'random', label: 'Random' },
-  { id: 'heuristic', label: 'Heuristic' },
-  { id: 'mcts', label: 'MCTS (search)' },
-  { id: 'rl', label: 'RL policy' },
-];
+import ImageDisclaimer from './ImageDisclaimer';
 
 function EventLog({ lines, live }) {
   const ref = useRef(null);
@@ -30,8 +24,10 @@ function EventLog({ lines, live }) {
   );
 }
 
-export default function WatchMode({ decks }) {
+export default function WatchMode({ decks, agents }) {
   const { user } = useAuth();
+  const AGENTS = agents && agents.length ? agents
+    : [{ id: 'heuristic', label: 'Heuristic' }, { id: 'mcts', label: 'MCTS' }];
   const [cfg, setCfg] = useState({ deck_a: 'charizard_ex', deck_b: 'gardevoir_ex', agent_a: 'heuristic', agent_b: 'mcts' });
   const [game, setGame] = useState(null);
   const [state, setState] = useState(null);
@@ -72,6 +68,7 @@ export default function WatchMode({ decks }) {
 
   return (
     <div>
+      <ImageDisclaimer />
       <div className="page-head">
         <div className="eyebrow">Mode · Spectate</div>
         <h1>Watch agents duel</h1>

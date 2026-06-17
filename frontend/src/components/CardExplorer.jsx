@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import ImageDisclaimer from './ImageDisclaimer';
 
 export default function CardExplorer() {
   const [q, setQ] = useState('');
   const [cards, setCards] = useState([]);
   const [source, setSource] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sources, setSources] = useState(null);
 
   async function search(query) {
     setLoading(true);
@@ -17,9 +19,11 @@ export default function CardExplorer() {
     finally { setLoading(false); }
   }
   useEffect(() => { search(''); }, []);
+  useEffect(() => { api.sources().then(setSources).catch(() => {}); }, []);
 
   return (
     <div>
+      <ImageDisclaimer />
       <div className="page-head">
         <div className="eyebrow">Reference · Standard</div>
         <h1>Card explorer</h1>
@@ -51,6 +55,17 @@ export default function CardExplorer() {
             </div>
           ))}
           {cards.length === 0 && <div className="panel pad sub">No cards found.</div>}
+        </div>
+      )}
+
+      {sources && (
+        <div className="panel pad" style={{ marginTop: 16 }}>
+          <b style={{ fontFamily: 'var(--display)' }}>Official sources</b>
+          <div className="row" style={{ marginTop: 10, gap: 10 }}>
+            {sources.links?.map((l) => (
+              <a key={l.url} className="btn ghost sm" href={l.url} target="_blank" rel="noreferrer">{l.label} ↗</a>
+            ))}
+          </div>
         </div>
       )}
     </div>

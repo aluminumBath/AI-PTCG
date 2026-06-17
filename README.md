@@ -7,10 +7,17 @@ rules-faithful environment — plus a polished web app to **watch** agents duel,
 - **Rules engine** — a faithful Standard-format engine: evolution lines, energy
   attachment, abilities, trainers, retreat, status conditions, weakness/
   resistance, prizes (incl. multi-prize `ex` Pokémon), and all win conditions.
-- **Four agent brains** — `random`, `heuristic`, `mcts` (Monte-Carlo Tree
-  Search planner), and `rl` (a PPO self-play policy/value network).
+- **Seven model types** — `random`, `heuristic`, `minimax` (lookahead),
+  `mcts`, `ismcts` (Information-Set MCTS for **imperfect information** — samples
+  hidden cards instead of peeking), `rl` (PPO self-play net), and `rl_mcts`
+  (value-network-guided search). Spanning baseline, rule-based, search, learned,
+  and hybrid families.
+- **Model arena** — run a round-robin between any models across your decks and
+  rank them by win rate, with a head-to-head matrix, to find the best opponent.
 - **RL self-play** — a PPO trainer with league-style self-play, checkpoints, and
   a live metrics feed for the dashboard.
+- **Deck import** — paste a Pokémon TCG Live decklist; it's validated against the
+  implemented card pool and becomes selectable in any game.
 - **Full-stack app** — FastAPI backend + React/Vite frontend, Postgres-backed
   accounts (login, history, admin), Dockerized locally and deployable to Render
   with a Neon database.
@@ -18,10 +25,22 @@ rules-faithful environment — plus a polished web app to **watch** agents duel,
 > **Honest scope.** The official API (pokemontcg.io) provides card *data* —
 > names, text, images, set legality — but **not executable rules**. Each card's
 > behaviour is hand-authored in `backend/engine/effects.py`. The engine ships
-> with two deep, faithful Standard archetypes (**Charizard ex** and
-> **Gardevoir ex**) and is built to extend: add a card, implement its effect,
-> drop it in a deck. The Card Explorer browses the full live card list; the
-> battle engine plays the implemented pool.
+> with six faithful, rules-legal Standard archetypes — **Charizard ex** and
+> **Gardevoir ex** (Stage-2 evolution midrange), **Miraidon ex** and **Roaring
+> Moon ex** (all-Basic aggro), and **Chien-Pao ex** (Water) and **Iron Valiant
+> ex** (Psychic) — every deck validated as exactly 60 cards under the 4-copy
+> rule. It is built to extend: add a card, implement its effect, drop it in a
+> deck. The Card Explorer browses the full live card list; the battle engine
+> plays the implemented pool.
+
+> **Rules & attribution.** The engine enforces the official rules (turn
+> structure, the first-player turn-1 restrictions, the Pokémon Checkup for
+> Special Conditions on both Actives, weakness/resistance, prizes and win
+> conditions, and 60-card / 4-copy deck construction) — see the in-app **Rules
+> feed** or `GET /api/rules`. Pokémon and all card/character images are © The
+> Pokémon Company / Nintendo / Game Freak / Creatures Inc.; this project claims
+> no ownership and shows imagery for reference only (a disclaimer appears above
+> any view with images; see `GET /api/sources`).
 
 ---
 
@@ -30,13 +49,14 @@ rules-faithful environment — plus a polished web app to **watch** agents duel,
 ```
 backend/
   engine/     rules engine (cards, state, actions, effects, game loop)
-  agents/     random, heuristic, MCTS
+  agents/     registry + random, heuristic, minimax, MCTS, RL, RL+MCTS
+  eval/       tournament / model-comparison engine
   rl/         encoder, env, network, PPO trainer, RL agent
-  data/       card database + decks, live card-API client
+  data/       card database + decks, deck import, live card-API client
   db/         SQLAlchemy models, session, admin seed
   auth/       bcrypt + JWT auth routes
-  api/        FastAPI app (game sessions, training metrics, cards)
-frontend/     React/Vite SPA (watch / play / train / cards / admin)
+  api/        FastAPI app (game sessions, tournaments, metrics, cards)
+frontend/     React/Vite SPA (watch / play / import / arena / train / cards / admin)
 docker-compose.yml   local: postgres + backend + frontend
 render.yaml          production blueprint (backend + frontend, Neon DB)
 ```
@@ -169,6 +189,93 @@ On first boot the backend creates its tables in Neon and seeds the admin user.
 > **Free-tier note.** Render free web services sleep when idle and have no GPU,
 > so they're for serving (watch/play) and the dashboard — not training. The
 > committed checkpoint is what gets served.
+
+---
+
+## Tests
+
+End-to-end [Robot Framework](https://robotframework.org/) acceptance tests
+exercise the entire backend API (auth, game lifecycle across every deck and
+brain, training metrics, cards). With the backend running:
+
+```bash
+pip install -r tests/requirements.txt
+TCG_BASE_URL=http://localhost:8000 robot --outputdir tests/results tests/
+```
+
+See `tests/README.md` for details and how to extend to browser-level UI tests.
+
+**Continuous integration.** `.github/workflows/ci.yml` runs on every push/PR: it
+spins up Postgres, runs the engine smoke test, boots the API, runs the full Robot
+suite against it, and builds the frontend. Test reports are uploaded as an
+artifact.
+
+## Skill-rating ladder (Submissions)
+
+The **Ladder** tab mirrors how Kaggle's simulation competition scores agents.
+Enter up to **10 Submissions** (an agent + a deck, or rotating decks). Each one
+first plays a **validation game against a copy of itself**; only if it completes
+cleanly does it join the pool at μ₀ = 600 (otherwise it's marked **Error** with
+logs). Hit **Run episodes** to play rating-matched games on rotating decks.
+
+Skill is a Gaussian **N(μ, σ²)** updated with a from-scratch **TrueSkill-style**
+rule (`backend/ladder/rating.py`): the winner's μ rises and the loser's falls (a
+draw pulls both toward their mean); the update scales with how surprising the
+result was *and* with each agent's uncertainty σ; σ shrinks with the information
+gained; and the score/margin never affects ratings. New submissions play more
+often for faster feedback, agents are ranked by the conservative score **μ − 3σ**,
+and the **rating-progress chart** plots μ over time with a σ band. Each
+submission has an **exporter** (model + deck + rating manifest) for the Kaggle
+agent seam.
+
+---
+
+## PTCG AI Battle Challenge (Kaggle)
+
+This project targets The Pokémon Company's **Pokémon TCG AI Battle Challenge**,
+which has two linked Kaggle categories:
+
+- **Simulation** ([pokemon-tcg-ai-battle](https://www.kaggle.com/competitions/pokemon-tcg-ai-battle)) —
+  submit an agent that Kaggle runs in continuous, imperfect-information matches on
+  a live leaderboard. Our agent entrypoint lives in
+  `backend/competition/agent_entry.py`; the model selection, rules engine, and
+  imperfect-information agents are ready — bind its `decode_observation` /
+  `encode_action` to the official starter environment to submit.
+- **Strategy** ([...-challenge-strategy](https://www.kaggle.com/competitions/pokemon-tcg-ai-battle-challenge-strategy)) —
+  the prize-bearing category, judged on the *reasoning* behind your agent. The
+  **Competition** tab (or `POST /api/competition/report`) generates a Strategy
+  writeup from a live tournament — see `docs/STRATEGY_REPORT.md` for a sample.
+
+For imperfect information we added **ISMCTS**, which re-samples the hidden cards
+each search iteration (root-parallel determinization) rather than peeking at the
+true state, and the **RL** policy operates only on the observable encoding — both
+appropriate for the contest. This repo is unaffiliated with The Pokémon Company
+and Kaggle.
+
+---
+
+## Compare models (Model arena)
+
+The **Model arena** tab (or `POST /api/tournament/run`) runs a round-robin
+between the models you select, across the decks you select (your "dataset"),
+alternating sides and deck matchups for fairness. It returns a ranked
+leaderboard (win rate, W/L/D, average game length) and a head-to-head win
+matrix, so you can see which model is the strongest opponent. Tournaments run as
+a background job — `GET /api/tournament/{job_id}` reports live progress and the
+final result. Add a model once in `backend/agents/registry.py` and it shows up
+everywhere: the game modes, the arena, and the dropdowns.
+
+---
+
+## Import your own decks
+
+In the app's **Deck import** tab (or `POST /api/decks/import`), paste a decklist
+in the Pokémon TCG Live export format — e.g. `3 Charizard ex OBF 125`. The
+importer maps each line onto the engine's implemented cards, reports any cards
+not yet implemented (so you know why a list isn't battle-ready) and the usual
+4-copy guideline, and — when valid — registers the deck so it appears in the
+Watch and Play deck pickers. `GET /api/cards/catalog` lists the battle-ready
+cards and returns a ready-to-paste sample.
 
 ---
 
