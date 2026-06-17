@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+backend/tcg_dev.db
+backend/.card_cache/
+backend/checkpoints/policy_snapshot_*.pt
+
+# Node / Vite
+node_modules/
+frontend/dist/
+frontend/.env
+
+# OS / editor
+.DS_Store
+*.swp

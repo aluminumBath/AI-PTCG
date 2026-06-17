@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+tcg_dev.db
+.card_cache/
+checkpoints/policy_snapshot_*.pt
+.pytest_cache/

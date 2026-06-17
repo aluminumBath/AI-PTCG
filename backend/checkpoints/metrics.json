@@ -1,0 +1,222 @@
+[
+  {
+    "update": 1,
+    "winrate_recent": 0.25,
+    "winrate_update": 0.25,
+    "policy_loss": -0.0082,
+    "value_loss": 0.3333,
+    "entropy": 1.5515,
+    "episodes": 16,
+    "elapsed_s": 3.0,
+    "opponent": "random"
+  },
+  {
+    "update": 2,
+    "winrate_recent": 0.312,
+    "winrate_update": 0.375,
+    "policy_loss": -0.0032,
+    "value_loss": 0.2071,
+    "entropy": 1.6231,
+    "episodes": 32,
+    "elapsed_s": 7.0,
+    "opponent": "random"
+  },
+  {
+    "update": 3,
+    "winrate_recent": 0.396,
+    "winrate_update": 0.562,
+    "policy_loss": -0.0027,
+    "value_loss": 0.1421,
+    "entropy": 1.5117,
+    "episodes": 48,
+    "elapsed_s": 11.5,
+    "opponent": "random"
+  },
+  {
+    "update": 4,
+    "winrate_recent": 0.469,
+    "winrate_update": 0.688,
+    "policy_loss": -0.0032,
+    "value_loss": 0.1475,
+    "entropy": 1.5758,
+    "episodes": 64,
+    "elapsed_s": 15.2,
+    "opponent": "random"
+  },
+  {
+    "update": 5,
+    "winrate_recent": 0.45,
+    "winrate_update": 0.375,
+    "policy_loss": -0.0049,
+    "value_loss": 0.1525,
+    "entropy": 1.6707,
+    "episodes": 80,
+    "elapsed_s": 20.2,
+    "opponent": "random"
+  },
+  {
+    "update": 6,
+    "winrate_recent": 0.458,
+    "winrate_update": 0.5,
+    "policy_loss": -0.0055,
+    "value_loss": 0.1805,
+    "entropy": 1.6841,
+    "episodes": 96,
+    "elapsed_s": 24.9,
+    "opponent": "random"
+  },
+  {
+    "update": 7,
+    "winrate_recent": 0.464,
+    "winrate_update": 0.5,
+    "policy_loss": -0.0115,
+    "value_loss": 0.1684,
+    "entropy": 1.7506,
+    "episodes": 112,
+    "elapsed_s": 29.5,
+    "opponent": "random"
+  },
+  {
+    "update": 8,
+    "winrate_recent": 0.461,
+    "winrate_update": 0.438,
+    "policy_loss": -0.0102,
+    "value_loss": 0.2057,
+    "entropy": 1.7538,
+    "episodes": 128,
+    "elapsed_s": 33.6,
+    "opponent": "random"
+  },
+  {
+    "update": 9,
+    "winrate_recent": 0.451,
+    "winrate_update": 0.375,
+    "policy_loss": -0.0109,
+    "value_loss": 0.1568,
+    "entropy": 1.6893,
+    "episodes": 144,
+    "elapsed_s": 37.8,
+    "opponent": "random"
+  },
+  {
+    "update": 10,
+    "winrate_recent": 0.444,
+    "winrate_update": 0.375,
+    "policy_loss": -0.0054,
+    "value_loss": 0.2872,
+    "entropy": 1.6294,
+    "episodes": 160,
+    "elapsed_s": 41.0,
+    "opponent": "random"
+  },
+  {
+    "update": 11,
+    "winrate_recent": 0.449,
+    "winrate_update": 0.5,
+    "policy_loss": -0.0056,
+    "value_loss": 0.2904,
+    "entropy": 1.5472,
+    "episodes": 176,
+    "elapsed_s": 44.8,
+    "opponent": "random"
+  },
+  {
+    "update": 12,
+    "winrate_recent": 0.453,
+    "winrate_update": 0.5,
+    "policy_loss": -0.0027,
+    "value_loss": 0.202,
+    "entropy": 1.5836,
+    "episodes": 192,
+    "elapsed_s": 49.3,
+    "opponent": "random"
+  },
+  {
+    "update": 13,
+    "winrate_recent": 0.47,
+    "winrate_update": 0.5,
+    "policy_loss": -0.0018,
+    "value_loss": 0.2341,
+    "entropy": 1.6469,
+    "episodes": 208,
+    "elapsed_s": 53.2,
+    "opponent": "random"
+  },
+  {
+    "update": 14,
+    "winrate_recent": 0.49,
+    "winrate_update": 0.562,
+    "policy_loss": -0.0101,
+    "value_loss": 0.1762,
+    "entropy": 1.6507,
+    "episodes": 224,
+    "elapsed_s": 57.0,
+    "opponent": "random"
+  },
+  {
+    "update": 15,
+    "winrate_recent": 0.49,
+    "winrate_update": 0.562,
+    "policy_loss": -0.011,
+    "value_loss": 0.2649,
+    "entropy": 1.627,
+    "episodes": 240,
+    "elapsed_s": 60.1,
+    "opponent": "random"
+  },
+  {
+    "update": 16,
+    "winrate_recent": 0.505,
+    "winrate_update": 0.75,
+    "policy_loss": -0.0032,
+    "value_loss": 0.1887,
+    "entropy": 1.5166,
+    "episodes": 256,
+    "elapsed_s": 63.5,
+    "opponent": "random"
+  },
+  {
+    "update": 17,
+    "winrate_recent": 0.515,
+    "winrate_update": 0.625,
+    "policy_loss": -0.0141,
+    "value_loss": 0.3042,
+    "entropy": 1.5358,
+    "episodes": 272,
+    "elapsed_s": 66.5,
+    "opponent": "random"
+  },
+  {
+    "update": 18,
+    "winrate_recent": 0.535,
+    "winrate_update": 0.688,
+    "policy_loss": -0.0117,
+    "value_loss": 0.29,
+    "entropy": 1.68,
+    "episodes": 288,
+    "elapsed_s": 69.6,
+    "opponent": "random"
+  },
+  {
+    "update": 19,
+    "winrate_recent": 0.54,
+    "winrate_update": 0.562,
+    "policy_loss": -0.007,
+    "value_loss": 0.2693,
+    "entropy": 1.5522,
+    "episodes": 304,
+    "elapsed_s": 72.6,
+    "opponent": "random"
+  },
+  {
+    "update": 20,
+    "winrate_recent": 0.55,
+    "winrate_update": 0.688,
+    "policy_loss": -0.0089,
+    "value_loss": 0.4217,
+    "entropy": 1.5601,
+    "episodes": 320,
+    "elapsed_s": 74.9,
+    "opponent": "random"
+  }
+]

@@ -1,0 +1,51 @@
+# Render Blueprint — deploys the backend (Docker web service) and the frontend
+# (static site). The database is Neon (https://neon.com); set DATABASE_URL to your
+# Neon connection string. See README for the full walkthrough.
+#
+# Render free web services sleep when idle and CANNOT train — they serve the
+# prebuilt RL checkpoint for "watch" / "play" and the training dashboard reads
+# the bundled metrics. Train locally (or on a GPU box) and commit the checkpoint.
+
+services:
+  - type: web
+    name: tcg-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # Neon connection string, e.g.
+      # postgresql://USER:PASSWORD@ep-xxx.us-east-2.aws.neon.tech/tcg?sslmode=require
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_EMAIL
+        value: steeleschauer@gmail.com
+      # Set this in the Render dashboard (kept out of source control).
+      - key: ADMIN_PASSWORD
+        sync: false
+      # Optional: raises pokemontcg.io rate limits.
+      - key: POKEMONTCG_API_KEY
+        sync: false
+
+  - type: web
+    name: tcg-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    autoDeploy: true
+    envVars:
+      # After the backend deploys, set this to its public URL, e.g.
+      # https://tcg-backend.onrender.com
+      - key: VITE_API_BASE
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
