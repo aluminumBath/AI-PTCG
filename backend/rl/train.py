@@ -70,10 +70,22 @@ def train(
 
     env = SelfPlayEnv(opponent_policy=_make_opponent(opponent, LATEST))
     win_hist = deque(maxlen=200)
+    # Resume the metrics curve if a prior run exists, so chunked/continued
+    # training produces one continuous dashboard curve.
     metrics_log = []
+    base_update = 0
+    if os.path.exists(METRICS):
+        try:
+            with open(METRICS) as fh:
+                metrics_log = json.load(fh)
+            base_update = metrics_log[-1]["update"] if metrics_log else 0
+            print(f"Resuming metrics from update {base_update}.")
+        except Exception:
+            metrics_log = []
     start = time.time()
 
-    for update in range(1, updates + 1):
+    for local_update in range(1, updates + 1):
+        update = base_update + local_update
         # ---- collect rollouts ----
         batch = []  # list of episodes; each episode is list of step dicts
         wins = 0

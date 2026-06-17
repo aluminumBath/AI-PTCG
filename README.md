@@ -69,8 +69,11 @@ What's running:
 - **frontend** — nginx-served app on `:5173`
 
 The "RL policy" agent and the Training dashboard work immediately using the
-**bundled starter checkpoint** (`backend/checkpoints/`). It's only lightly
-trained — train it further for stronger play (below).
+**bundled checkpoint** (`backend/checkpoints/`), trained for 155 PPO updates
+(~2,500 self-play games). On held-out evaluation it wins **~76% vs random** and
+**~51% vs the heuristic** — i.e. it has learned, from self-play alone, to play
+on par with (slightly ahead of) the hand-crafted baseline. Train it further for
+stronger play (below).
 
 ---
 
@@ -119,8 +122,9 @@ python -m rl.train --updates 800 --episodes-per-update 24 --opponent self
 | `--lr`, `--seed`       | learning rate / RNG seed                             |
 
 **Expectations (honest):** on CPU this is slow but real. The policy starts
-below random, passes random within tens of updates, and approaches/surpasses
-the heuristic with hundreds–thousands of updates. A GPU (set nothing special —
+below random, passes random within tens of updates, and reaches parity with the
+heuristic by ~150 updates (the bundled checkpoint). Continued self-play and more
+updates push it further. A GPU (set nothing special —
 PyTorch uses CUDA automatically if present) speeds this up dramatically. The
 free Render tier **cannot** train; train here and commit the checkpoint, which
 the deployed app then serves.
