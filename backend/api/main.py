@@ -32,7 +32,29 @@ from db.models import User, GameRecord
 from db.seed import seed_admin
 from auth.routes import router as auth_router, current_user
 
-app = FastAPI(title="Pokémon TCG AI Arena", version="1.0")
+import math as _math
+from starlette.responses import JSONResponse as _JSONResponse
+
+
+def _finite(o):
+    """Recursively replace NaN/Infinity with null so a diverged training run
+    (or any stray non-finite float) can't make a response fail to serialize."""
+    if isinstance(o, float):
+        return o if _math.isfinite(o) else None
+    if isinstance(o, dict):
+        return {k: _finite(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_finite(v) for v in o]
+    return o
+
+
+class SafeJSONResponse(_JSONResponse):
+    def render(self, content) -> bytes:  # type: ignore[override]
+        return super().render(_finite(content))
+
+
+app = FastAPI(title="Pokémon TCG AI Arena", version="1.0",
+              default_response_class=SafeJSONResponse)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
@@ -47,6 +69,30 @@ def _startup() -> None:
         seed_admin()
     except Exception as exc:  # don't crash the server if the DB is briefly unavailable
         print(f"[startup] admin seed skipped: {exc}")
+    try:
+        _load_image_overrides()
+    except Exception as exc:
+        print(f"[startup] image overrides skipped: {exc}")
+
+
+# card_id -> replacement image URL, cached in memory and applied on serialization
+IMAGE_OVERRIDES: dict[str, str] = {}
+
+
+def _load_image_overrides() -> None:
+    from db.database import SessionLocal
+    from db.models import CardImageOverride
+    db = SessionLocal()
+    try:
+        IMAGE_OVERRIDES.clear()
+        for row in db.query(CardImageOverride).all():
+            IMAGE_OVERRIDES[row.card_id] = row.image_url
+    finally:
+        db.close()
+
+
+def _img(card_id, image):
+    return IMAGE_OVERRIDES.get(card_id, image)
 
 _BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CKPT = os.environ.get(
@@ -61,11 +107,36 @@ def _make_agent(kind: str):
 
 
 class Session:
-    def __init__(self, engine: GameEngine, mode: str, agents: dict, human_seat: Optional[int]):
+    def __init__(self, engine: GameEngine, mode: str, agents: dict,
+                 human_seat: Optional[int], model_ids: Optional[dict] = None):
         self.engine = engine
         self.mode = mode
         self.agents = agents          # seat -> agent (for AI seats)
         self.human_seat = human_seat
+        self.model_ids = model_ids or {}   # seat -> model id string
+        self.recorded = False         # ensure we score the game only once
+
+
+def _record_session_result(sess: "Session") -> None:
+    """Record the finished game into the lifetime model scoreboard (once)."""
+    if sess.recorded or not sess.engine.state.is_over():
+        return
+    sess.recorded = True
+    try:
+        from stats.model_stats import record_game, record_single
+        winner = sess.engine.state.winner  # 0, 1, or None
+        if sess.mode == "ai_vs_ai":
+            result = "a" if winner == 0 else "b" if winner == 1 else "draw"
+            record_game(sess.model_ids.get(0), sess.model_ids.get(1), result)
+        else:
+            # human vs AI: score only the AI seat, from its perspective
+            ai_seat = next(iter(sess.agents), None)
+            if ai_seat is not None:
+                outcome = ("draw" if winner is None
+                           else "win" if winner == ai_seat else "loss")
+                record_single(sess.model_ids.get(ai_seat), outcome)
+    except Exception:
+        pass  # scoreboard must never break gameplay
 
 
 SESSIONS: dict[str, Session] = {}
@@ -105,12 +176,21 @@ def health():
 
 @app.get("/api/decks")
 def decks():
+    from data.cards_db import deck_catalog
     custom = [{"id": k, "name": v[0], "custom": True} for k, v in CUSTOM_DECKS.items()]
     return {
         "decks": list(DECKS.keys()) + list(CUSTOM_DECKS.keys()),
         "builtin": list(DECKS.keys()),
         "custom": custom,
+        "meta": deck_catalog(),
     }
+
+
+@app.get("/api/sets")
+def sets():
+    """Built-in expansions represented in the card pool (with counts)."""
+    from data.cards_db import builtin_sets
+    return {"sets": builtin_sets()}
 
 
 class DeckImportReq(BaseModel):
@@ -180,13 +260,16 @@ def new_game(req: NewGame):
         ai_seat = 1 - req.human_seat
         agents = {ai_seat: _make_agent(req.agent_b)}
         human_seat = req.human_seat
+        model_ids = {ai_seat: req.agent_b}
     else:
         agents = {0: _make_agent(req.agent_a), 1: _make_agent(req.agent_b)}
         human_seat = None
+        model_ids = {0: req.agent_a, 1: req.agent_b}
     gid = uuid.uuid4().hex[:12]
-    SESSIONS[gid] = Session(engine, req.mode, agents, human_seat)
+    SESSIONS[gid] = Session(engine, req.mode, agents, human_seat, model_ids)
     if req.mode == "human_vs_ai":
         _advance_ai_until_human(SESSIONS[gid])
+        _record_session_result(SESSIONS[gid])
     return {"game_id": gid, "seed": seed, "state": _view(SESSIONS[gid])}
 
 
@@ -211,6 +294,12 @@ def _advance_ai_until_human(sess: Session, guard_max: int = 500) -> None:
 def _view(sess: Session) -> dict:
     viewer = sess.human_seat  # None -> full view for spectating
     state = sess.engine.state.to_dict(viewer=viewer)
+    # apply any user image overrides to the board's Pokémon art
+    if IMAGE_OVERRIDES:
+        for pl in state.get("players", []):
+            for poke in ([pl.get("active")] + (pl.get("bench") or [])):
+                if poke and poke.get("card_id") in IMAGE_OVERRIDES:
+                    poke["image"] = IMAGE_OVERRIDES[poke["card_id"]]
     state["legal_actions"] = _legal_view(sess)
     return state
 
@@ -273,6 +362,7 @@ def step(gid: str):
         raise HTTPException(400, "no agent for current seat")
     action = agent.select(eng)
     eng.apply(action)
+    _record_session_result(sess)
     return {"done": eng.state.is_over(), "last_action": action.describe(), "state": _view(sess)}
 
 
@@ -293,22 +383,52 @@ def human_action(gid: str, req: ActionReq):
     eng.apply(legal[req.index])
     # let the AI play until control returns to the human or the game ends
     _advance_ai_until_human(sess)
+    _record_session_result(sess)
     return {"done": eng.state.is_over(), "state": _view(sess)}
 
 
 @app.get("/api/training/metrics")
 def training_metrics():
     import json
-    path = os.path.join(_BACKEND_ROOT, "checkpoints", "metrics.json")
-    if not os.path.exists(path):
+    # Look where the trainer actually writes: honour CKPT_DIR (same env var the
+    # trainer uses), then the package-relative path, then the CWD. Use isfile so
+    # a *directory* named metrics.json (e.g. a stray dir or a volume mount) is
+    # reported clearly instead of raising IsADirectoryError on open().
+    candidates = []
+    if os.environ.get("CKPT_DIR"):
+        candidates.append(os.path.join(os.environ["CKPT_DIR"], "metrics.json"))
+    candidates.append(os.path.join(_BACKEND_ROOT, "checkpoints", "metrics.json"))
+    candidates.append(os.path.join(os.getcwd(), "checkpoints", "metrics.json"))
+
+    found = next((p for p in candidates if os.path.isfile(p)), None)
+    if not found:
+        dir_hit = next((p for p in candidates if os.path.isdir(p)), None)
+        if dir_hit:
+            return {"metrics": [], "note": (
+                f"'{dir_hit}' is a directory, not a file. Delete it (e.g. "
+                f"rmdir '{dir_hit}') — or, if it's a Docker volume mount, remove "
+                "that mount — so the trainer can write metrics.json, then re-run "
+                "python -m rl.train.")}
         return {"metrics": [], "note": "No training run yet. Run python -m rl.train"}
-    with open(path) as fh:
-        return {"metrics": json.load(fh)}
+    try:
+        with open(found, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except json.JSONDecodeError:
+        return {"metrics": [], "note": "Training metrics file is mid-write — refresh in a moment."}
+    except Exception as e:  # never 500 the dashboard; show the real reason
+        return {"metrics": [], "note": f"Couldn't read {found}: {e}"}
+    return {"metrics": _finite(data)}
 
 
 @app.get("/api/cards/search")
 def cards_search(q: str = "", page: int = 1, standard: bool = True):
-    return card_api.search_cards(q, page=page, standard_only=standard)
+    res = card_api.search_cards(q, page=page, standard_only=standard)
+    if IMAGE_OVERRIDES:
+        for c in res.get("data", []):
+            if c.get("id") in IMAGE_OVERRIDES:
+                c["image"] = IMAGE_OVERRIDES[c["id"]]
+                c["image_overridden"] = True
+    return res
 
 
 @app.get("/api/cards/sets")
@@ -380,7 +500,7 @@ def tournament_run(req: TournamentReq):
     total = (len(agent_ids) * (len(agent_ids) - 1) // 2) * games
     job_id = uuid.uuid4().hex[:12]
     TOURNAMENTS[job_id] = {
-        "status": "running", "done": 0, "total": total,
+        "status": "running", "done": 0, "total": total, "cancel": False,
         "result": None, "error": None,
         "config": {"agents": agent_ids, "decks": req.decks, "games_per_pairing": games},
     }
@@ -393,15 +513,26 @@ def tournament_run(req: TournamentReq):
             res = run_tournament(
                 agent_ids, req.decks, games,
                 deck_resolver=_resolve_deck, checkpoint=CKPT, progress=prog,
+                should_continue=lambda: not TOURNAMENTS[job_id].get("cancel"),
             )
             TOURNAMENTS[job_id]["result"] = res
-            TOURNAMENTS[job_id]["status"] = "done"
+            TOURNAMENTS[job_id]["status"] = "cancelled" if res.get("cancelled") else "done"
         except Exception as exc:  # surface to the client, don't crash the server
             TOURNAMENTS[job_id]["status"] = "error"
             TOURNAMENTS[job_id]["error"] = str(exc)
 
     threading.Thread(target=worker, daemon=True).start()
     return {"job_id": job_id, "total_games": total}
+
+
+@app.post("/api/tournament/{job_id}/cancel")
+def tournament_cancel(job_id: str):
+    job = TOURNAMENTS.get(job_id)
+    if not job:
+        raise HTTPException(404, "tournament not found")
+    if job["status"] == "running":
+        job["cancel"] = True  # the worker stops at the next game boundary
+    return {"job_id": job_id, "status": job["status"], "cancelling": job.get("cancel", False)}
 
 
 @app.get("/api/tournament/{job_id}")
@@ -452,30 +583,54 @@ def competition_info():
 
 class ReportReq(BaseModel):
     job_id: Optional[str] = None
-    agents: list[str] = ["heuristic", "minimax", "rl", "ismcts"]
+    agents: list[str] = ["heuristic", "greedy", "minimax", "rl"]
     decks: list[str] = ["charizard_ex", "gardevoir_ex", "miraidon_ex"]
-    games_per_pairing: int = 4
+    games_per_pairing: int = 3
+
+
+# background report jobs (so generation never blocks a request or dies on
+# client navigation — the UI polls for the result and can re-attach after a
+# tab switch)
+REPORT_JOBS: dict[str, dict] = {}
+
+
+def _run_report_job(job_id: str, agents: list[str], decks: list[str], games: int):
+    from eval.tournament import run_tournament
+    from competition.strategy_report import generate_report
+    import traceback
+    try:
+        result = run_tournament(agents, decks, games, deck_resolver=_resolve_deck,
+                                checkpoint=CKPT, record=False,
+                                progress=lambda d, t: REPORT_JOBS[job_id].update(progress=d, total=t))
+        REPORT_JOBS[job_id].update(
+            status="done", markdown=generate_report(result, decks),
+            best=result.get("best"), filename="STRATEGY_REPORT.md")
+    except Exception:
+        REPORT_JOBS[job_id].update(status="error", error=traceback.format_exc())
 
 
 @app.post("/api/competition/report")
 def competition_report(req: ReportReq):
-    """Build a Strategy-Category writeup from a tournament result. Uses a
-    finished tournament job if given, else runs a quick synchronous one."""
-    from eval.tournament import run_tournament
-    from competition.strategy_report import generate_report
+    """Start a Strategy-Category writeup as a background job; returns a job id.
+    Poll GET /api/competition/report/{job_id} for the result."""
+    import threading
+    for d in req.decks:
+        _resolve_deck(d)  # validate up front (raises 4xx if unknown)
+    games = max(1, min(6, req.games_per_pairing))
+    job_id = uuid.uuid4().hex[:12]
+    REPORT_JOBS[job_id] = {"status": "running", "progress": 0, "total": 0,
+                           "markdown": None, "best": None, "error": None}
+    threading.Thread(target=_run_report_job,
+                     args=(job_id, req.agents, req.decks, games), daemon=True).start()
+    return {"job_id": job_id, "status": "running"}
 
-    if req.job_id and TOURNAMENTS.get(req.job_id, {}).get("status") == "done":
-        result = TOURNAMENTS[req.job_id]["result"]
-        decks = result["decks"]
-    else:
-        for d in req.decks:
-            _resolve_deck(d)
-        games = max(1, min(10, req.games_per_pairing))
-        result = run_tournament(req.agents, req.decks, games,
-                                deck_resolver=_resolve_deck, checkpoint=CKPT)
-        decks = req.decks
-    markdown = generate_report(result, decks)
-    return {"markdown": markdown, "filename": "STRATEGY_REPORT.md", "best": result.get("best")}
+
+@app.get("/api/competition/report/{job_id}")
+def competition_report_status(job_id: str):
+    job = REPORT_JOBS.get(job_id)
+    if not job:
+        raise HTTPException(404, "report job not found")
+    return job
 
 
 # --------------------------------------------------------------------------- #
@@ -553,6 +708,128 @@ def episodes_status_ep(job_id: str):
     if not job:
         raise HTTPException(404, "job not found")
     return job
+
+
+@app.post("/api/episodes/{job_id}/cancel")
+def episodes_cancel_ep(job_id: str):
+    from ladder.service import cancel_episode_run
+    job = cancel_episode_run(job_id)
+    if not job:
+        raise HTTPException(404, "job not found")
+    return {"job_id": job_id, "status": job["status"], "cancelling": job.get("cancel", False)}
+
+
+# --------------------------------------------------------------------------- #
+# Lifetime model scoreboard (every game involving a model is recorded)
+# --------------------------------------------------------------------------- #
+@app.get("/api/models/stats")
+def model_stats_ep():
+    from stats.model_stats import list_stats
+    return {"stats": list_stats()}
+
+
+@app.get("/api/models/stats/export")
+def model_stats_export_ep(format: str = "json"):
+    from stats.model_stats import list_stats, export_csv
+    if format == "csv":
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(
+            export_csv(),
+            headers={"Content-Disposition": "attachment; filename=model_scores.csv"},
+        )
+    from datetime import datetime, timezone
+    return {"stats": list_stats(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "filename": "model_scores.json"}
+
+
+@app.post("/api/models/stats/reset")
+def model_stats_reset_ep():
+    from stats.model_stats import reset_stats
+    return {"reset": reset_stats()}
+
+
+# --------------------------------------------------------------------------- #
+# Model explainer + easy export
+# --------------------------------------------------------------------------- #
+@app.get("/api/models/docs")
+def model_docs_ep():
+    from agents.model_docs import model_docs
+    return {"models": model_docs()}
+
+
+def _model_manifest(model_id: str) -> dict:
+    from agents.model_docs import model_doc
+    from stats.model_stats import list_stats
+    doc = model_doc(model_id)
+    if not doc:
+        raise HTTPException(404, "unknown model")
+    score = next((s for s in list_stats() if s["model_id"] == model_id), None)
+    return {
+        "model": model_id,
+        "label": doc["label"],
+        "family": doc["family"],
+        "summary": doc["summary"],
+        "rationale": doc["why"],
+        "how_it_works": doc["how"],
+        "parameters": doc["params"],
+        "imperfect_info": doc["imperfect_info"],
+        "lifetime_score": score,
+        "entrypoint": "backend/competition/agent_entry.py",
+        "usage": "Set AGENT_MODEL to this model id in the competition agent entrypoint.",
+    }
+
+
+@app.get("/api/models/{model_id}/export")
+def model_export_ep(model_id: str):
+    return _model_manifest(model_id)
+
+
+@app.get("/api/models/export")
+def models_export_all_ep():
+    from agents.registry import REGISTRY
+    from datetime import datetime, timezone
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "models": [_model_manifest(mid) for mid in REGISTRY],
+    }
+
+
+class CardImageReq(BaseModel):
+    url: str
+
+
+@app.post("/api/cards/{card_id}/image")
+def set_card_image_ep(card_id: str, req: CardImageReq, db=Depends(get_db)):
+    from db.models import CardImageOverride
+    url = (req.url or "").strip()
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise HTTPException(400, "image URL must start with http:// or https://")
+    row = db.query(CardImageOverride).filter(
+        CardImageOverride.card_id == card_id).one_or_none()
+    if row is None:
+        row = CardImageOverride(card_id=card_id, image_url=url)
+        db.add(row)
+    else:
+        row.image_url = url
+    db.commit()
+    IMAGE_OVERRIDES[card_id] = url           # update in-memory cache
+    return {"card_id": card_id, "image": url}
+
+
+@app.delete("/api/cards/{card_id}/image")
+def clear_card_image_ep(card_id: str, db=Depends(get_db)):
+    from db.models import CardImageOverride
+    db.query(CardImageOverride).filter(
+        CardImageOverride.card_id == card_id).delete()
+    db.commit()
+    IMAGE_OVERRIDES.pop(card_id, None)
+    return {"card_id": card_id, "cleared": True}
+
+
+@app.get("/api/cards/overrides")
+def list_card_overrides_ep():
+    return {"overrides": [{"card_id": k, "image": v} for k, v in IMAGE_OVERRIDES.items()]}
 
 
 # --------------------------------------------------------------------------- #

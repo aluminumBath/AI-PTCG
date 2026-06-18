@@ -11,6 +11,8 @@ import ModelArena from './components/ModelArena';
 import RulesFeed from './components/RulesFeed';
 import Competition from './components/Competition';
 import Submissions from './components/Submissions';
+import Scoreboard from './components/Scoreboard';
+import Decks from './components/Decks';
 import AdminPanel from './components/AdminPanel';
 
 const NAV = [
@@ -19,8 +21,10 @@ const NAV = [
   { id: 'import', label: 'Deck import', group: 'Build' },
   { id: 'arena', label: 'Model arena', group: 'Intelligence' },
   { id: 'submissions', label: 'Ladder', group: 'Intelligence' },
+  { id: 'scores', label: 'Model scores', group: 'Intelligence' },
   { id: 'train', label: 'Training lab', group: 'Intelligence' },
   { id: 'competition', label: 'Competition', group: 'Intelligence' },
+  { id: 'decks', label: 'Decks', group: 'Reference' },
   { id: 'cards', label: 'Card explorer', group: 'Reference' },
   { id: 'rules', label: 'Rules feed', group: 'Reference' },
 ];
@@ -88,8 +92,10 @@ function Shell() {
         {tab === 'import' && <DeckImport onImported={() => { loadDecks(); }} />}
         {tab === 'arena' && <ModelArena models={models} decks={decks} />}
         {tab === 'submissions' && <Submissions />}
+        {tab === 'scores' && <Scoreboard />}
         {tab === 'train' && <TrainingDashboard />}
         {tab === 'competition' && <Competition />}
+        {tab === 'decks' && <Decks />}
         {tab === 'cards' && <CardExplorer />}
         {tab === 'rules' && <RulesFeed />}
         {tab === 'admin' && user.is_admin && <AdminPanel />}

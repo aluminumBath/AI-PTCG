@@ -152,6 +152,8 @@ def _run_episodes_job(job_id: str, count: int, ckpt: str) -> None:
     try:
         job = EPISODE_JOBS[job_id]
         for i in range(count):
+            if job.get("cancel"):
+                break
             subs = db.query(Submission).filter(Submission.status == "active").all()
             if len(subs) < 2:
                 job["error"] = "need at least 2 active submissions"
@@ -178,8 +180,14 @@ def _run_episodes_job(job_id: str, count: int, ckpt: str) -> None:
             db.add(RatingPoint(submission_id=a.id, games=a.games, mu=a.mu, sigma=a.sigma))
             db.add(RatingPoint(submission_id=b.id, games=b.games, mu=b.mu, sigma=b.sigma))
             db.commit()
+            # lifetime per-model scoreboard (every ladder game counts)
+            try:
+                from stats.model_stats import record_game
+                record_game(a.agent_id, b.agent_id, result)
+            except Exception:
+                pass
             job["progress"] = i + 1
-        job["status"] = "done"
+        job["status"] = "cancelled" if job.get("cancel") else "done"
         job["standings"] = [
             submission_dict(s) for s in
             sorted(db.query(Submission).filter(Submission.status == "active").all(),
@@ -195,10 +203,19 @@ def _run_episodes_job(job_id: str, count: int, ckpt: str) -> None:
 def start_episode_run(count: int, ckpt: str) -> str:
     job_id = uuid.uuid4().hex[:12]
     EPISODE_JOBS[job_id] = {"status": "running", "progress": 0, "total": count,
-                            "error": None, "standings": []}
+                            "cancel": False, "error": None, "standings": []}
     threading.Thread(target=_run_episodes_job, args=(job_id, count, ckpt),
                      daemon=True).start()
     return job_id
+
+
+def cancel_episode_run(job_id: str) -> dict | None:
+    job = EPISODE_JOBS.get(job_id)
+    if not job:
+        return None
+    if job["status"] == "running":
+        job["cancel"] = True  # the worker stops at the next episode boundary
+    return job
 
 
 # --------------------------------------------------------------------------- #

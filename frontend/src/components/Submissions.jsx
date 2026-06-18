@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 
 const LINE = ['#4ea1ff', '#ff7a59', '#39d98a', '#c792ea', '#ffd166', '#f78fb3', '#5ad1cd'];
+const EP_JOB_KEY = 'tcg.ladder.episodeJob';
 
 function RatingChart({ series }) {
   // series: [{name, color, points:[{games,mu,sigma}]}]
@@ -51,9 +52,12 @@ export default function Submissions() {
   const [series, setSeries] = useState([]);
   const [form, setForm] = useState({ name: '', agent: '', deck: 'rotating' });
   const [run, setRun] = useState(null);
+  const [epJob, setEpJob] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
   const [err, setErr] = useState('');
   const [openLog, setOpenLog] = useState(null);
-  const poll = useRef(null);
+  const poll = useRef(null);     // submission validation polling
+  const epPoll = useRef(null);   // episode-run polling (independent lifecycle)
 
   async function refresh() {
     const r = await api.submissionsList();
@@ -72,8 +76,43 @@ export default function Submissions() {
       setForm((f) => ({ ...f, agent: r.models[1]?.id || r.models[0]?.id || '' }));
     });
     api.decks().then((r) => setDecks(r.decks));
-    return () => clearInterval(poll.current);
+    // re-attach to a running/finished episode job after a tab switch or refresh
+    const saved = localStorage.getItem(EP_JOB_KEY);
+    if (saved) {
+      setEpJob(saved);
+      api.episodeStatus(saved).then((st) => {
+        setRun(st);
+        if (st.status === 'running') startEpisodePolling(saved);
+        else localStorage.removeItem(EP_JOB_KEY);
+      }).catch(() => localStorage.removeItem(EP_JOB_KEY));
+    }
+    return () => { clearInterval(poll.current); clearInterval(epPoll.current); };
   }, []);
+
+  function startEpisodePolling(jobId) {
+    clearInterval(epPoll.current);
+    epPoll.current = setInterval(async () => {
+      try {
+        const st = await api.episodeStatus(jobId);
+        setRun(st);
+        refresh();
+        if (st.status !== 'running') {
+          clearInterval(epPoll.current);
+          setCancelling(false);
+          localStorage.removeItem(EP_JOB_KEY);
+        }
+      } catch (e) {
+        clearInterval(epPoll.current);
+        localStorage.removeItem(EP_JOB_KEY);
+      }
+    }, 1500);
+  }
+
+  async function stopEpisodes() {
+    if (!epJob) return;
+    setCancelling(true);
+    try { await api.cancelEpisodes(epJob); } catch (e) { setCancelling(false); }
+  }
 
   async function submit() {
     setErr('');
@@ -93,14 +132,10 @@ export default function Submissions() {
     setErr('');
     try {
       const { job_id } = await api.runEpisodes(40);
+      setEpJob(job_id);
+      localStorage.setItem(EP_JOB_KEY, job_id);  // survive tab switch / refresh
       setRun({ status: 'running', progress: 0, total: 40 });
-      clearInterval(poll.current);
-      poll.current = setInterval(async () => {
-        const st = await api.episodeStatus(job_id);
-        setRun(st);
-        if (st.status !== 'running') { clearInterval(poll.current); refresh(); }
-        else refresh();
-      }, 1500);
+      startEpisodePolling(job_id);
     } catch (e) { setErr(e.message); }
   }
 
@@ -155,14 +190,21 @@ export default function Submissions() {
               disabled={run?.status === 'running' || subs.filter((s) => s.status === 'active').length < 2}>
               {run?.status === 'running' ? <span className="spin" /> : 'Run 40 episodes'}
             </button>
+            {run?.status === 'running' && (
+              <button className="btn danger sm" onClick={stopEpisodes} disabled={cancelling} style={{ marginLeft: 8 }}>
+                {cancelling ? 'Stopping…' : 'Stop'}
+              </button>
+            )}
           </div>
           <p className="sub" style={{ fontSize: 12, marginTop: 8 }}>Pairs submissions with similar ratings; newer agents play more often for faster feedback.</p>
           {run && (
             <div style={{ marginTop: 10 }}>
               <div className="bar"><div className="bar-fill" style={{ width: `${(100 * (run.progress || 0)) / (run.total || 1)}%` }} /></div>
               <div className="sub" style={{ fontSize: 12, marginTop: 6 }}>
-                {run.status === 'running' ? `Playing… ${run.progress}/${run.total}` :
-                  run.status === 'error' ? `Error: ${run.error}` : `Done — ${run.progress} episodes played`}
+                {run.status === 'running' ? `Playing… ${run.progress}/${run.total} — runs on the server; you can switch tabs or refresh.` :
+                  run.status === 'error' ? `Error: ${run.error}` :
+                  run.status === 'cancelled' ? `Stopped after ${run.progress} episodes (ratings kept).` :
+                  `Done — ${run.progress} episodes played`}
               </div>
             </div>
           )}

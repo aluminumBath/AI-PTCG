@@ -37,6 +37,48 @@ def _minimax_factory(depth: int = 1):
     return make
 
 
+def _greedy_factory():
+    def make(**_):
+        from .greedy_agent import GreedyAgent
+        return GreedyAgent()
+    return make
+
+
+def _strategy_factory(name: str):
+    def make(**_):
+        from .heuristic_strategies import make_strategy_agent
+        return make_strategy_agent(name)
+    return make
+
+
+def _council_factory():
+    def make(checkpoint=None, **_):
+        from .ensemble_agents import build_council
+        return build_council(checkpoint)
+    return make
+
+
+def _prime_factory():
+    def make(checkpoint=None, **_):
+        from .ensemble_agents import PrimeAgent
+        return PrimeAgent(checkpoint)
+    return make
+
+
+def _meta_top3_factory():
+    def make(checkpoint=None, **_):
+        from .ensemble_agents import MetaTop3Agent
+        return MetaTop3Agent(checkpoint)
+    return make
+
+
+def _flat_mc_factory(samples: int = 12):
+    def make(**_):
+        from .flat_mc_agent import FlatMonteCarloAgent
+        return FlatMonteCarloAgent(samples=samples)
+    return make
+
+
 def _rl_mcts_factory(iterations: int = 120):
     def make(checkpoint: str | None = None, **_):
         try:
@@ -71,6 +113,34 @@ REGISTRY: dict[str, dict] = {
         "factory": lambda **_: HeuristicAgent(),
         "speed": "instant",
     },
+    "greedy": {
+        "label": "Greedy (1-ply)",
+        "family": "search",
+        "description": "Takes the move that leaves the best-evaluated board — no opponent reply. A fast, principled baseline.",
+        "factory": _greedy_factory(),
+        "speed": "fast",
+    },
+    "aggro": {
+        "label": "Aggressive",
+        "family": "rule-based",
+        "description": "Heuristic that races for prizes: maximises damage to the opponent and attacks at every opportunity.",
+        "factory": _strategy_factory("aggro"),
+        "speed": "fast",
+    },
+    "control": {
+        "label": "Control",
+        "family": "rule-based",
+        "description": "Heuristic that out-sustains the opponent: values board HP, a wide bench and healing over racing.",
+        "factory": _strategy_factory("control"),
+        "speed": "fast",
+    },
+    "setup": {
+        "label": "Setup / combo",
+        "family": "rule-based",
+        "description": "Heuristic that builds first: accelerates energy, evolves and widens the bench before committing.",
+        "factory": _strategy_factory("setup"),
+        "speed": "fast",
+    },
     "minimax": {
         "label": "Minimax (lookahead)",
         "family": "search",
@@ -83,6 +153,13 @@ REGISTRY: dict[str, dict] = {
         "family": "search",
         "description": "Monte-Carlo Tree Search with heuristic rollouts. Plans several moves ahead.",
         "factory": _mcts_factory(120),
+        "speed": "slow",
+    },
+    "flat_mc": {
+        "label": "Flat Monte-Carlo",
+        "family": "search",
+        "description": "Monte-Carlo evaluation: averages full rollouts per move and picks the best — flat sampling, no tree.",
+        "factory": _flat_mc_factory(12),
         "speed": "slow",
     },
     "ismcts": {
@@ -104,6 +181,27 @@ REGISTRY: dict[str, dict] = {
         "family": "hybrid",
         "description": "MCTS that evaluates leaves with the trained value network (AlphaZero-style).",
         "factory": _rl_mcts_factory(120),
+        "speed": "slow",
+    },
+    "council": {
+        "label": "Council (all agents)",
+        "family": "ensemble",
+        "description": "Combines every model: each casts a weighted vote and the plurality move is played.",
+        "factory": _council_factory(),
+        "speed": "slow",
+    },
+    "prime": {
+        "label": "Prime (best traits)",
+        "family": "ensemble",
+        "description": "Weighted vote of only the strongest models (learned + search + hidden-info + rule-based) with a Minimax safety veto.",
+        "factory": _prime_factory(),
+        "speed": "slow",
+    },
+    "meta_top3": {
+        "label": "Meta — top 3 (dynamic)",
+        "family": "ensemble",
+        "description": "Votes among the current top-3 models on the scoreboard leaderboard, re-resolving whenever it changes.",
+        "factory": _meta_top3_factory(),
         "speed": "slow",
     },
 }

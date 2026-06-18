@@ -36,6 +36,8 @@ def run_tournament(
     checkpoint: Optional[str] = None,
     progress: Optional[Callable[[int, int], None]] = None,
     seed: int = 0,
+    record: bool = True,
+    should_continue: Optional[Callable[[], bool]] = None,
 ) -> dict:
     agent_ids = list(dict.fromkeys(agent_ids))  # dedupe, keep order
     if len(agent_ids) < 2:
@@ -51,10 +53,16 @@ def run_tournament(
     pairs = list(itertools.combinations(agent_ids, 2))
     total = len(pairs) * games_per_pairing
     done = 0
+    cancelled = False
     rng = random.Random(seed)
 
     for a, b in pairs:
+        if cancelled:
+            break
         for g in range(games_per_pairing):
+            if should_continue and not should_continue():
+                cancelled = True
+                break
             # alternate which model is the first player (turn-1 advantage)
             seat0, seat1 = (a, b) if g % 2 == 0 else (b, a)
             d0 = deck_ids[g % len(deck_ids)]
@@ -76,6 +84,13 @@ def run_tournament(
                 stats[win_id]["wins"] += 1
                 stats[lose_id]["losses"] += 1
                 matrix[win_id][lose_id] += 1
+            if record:
+                try:
+                    from stats.model_stats import record_game
+                    res = "draw" if winner is None else ("a" if winner == 0 else "b")
+                    record_game(seat0, seat1, res)
+                except Exception:
+                    pass
             done += 1
             if progress:
                 progress(done, total)
@@ -100,5 +115,7 @@ def run_tournament(
         "decks": deck_ids,
         "games_per_pairing": games_per_pairing,
         "total_games": total,
+        "games_played": done,
+        "cancelled": cancelled,
         "best": standings[0]["agent"] if standings else None,
     }

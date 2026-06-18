@@ -150,6 +150,7 @@ class CardInstance:
     def clone_meta(self) -> dict:
         return {
             "uid": self.uid,
+            "card_id": self.card.id,
             "name": self.card.name,
             "hp": self.card.hp,
             "damage": self.damage,

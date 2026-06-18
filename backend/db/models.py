@@ -96,3 +96,28 @@ class Episode(Base):
     result: Mapped[str] = mapped_column(String(8))   # a|b|draw
     turns: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class ModelStat(Base):
+    """Lifetime aggregate score for an agent/model across *every* game it plays
+    (Watch, Play vs AI, Model Arena, and ladder episodes)."""
+    __tablename__ = "model_stats"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    model_id: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    games: Mapped[int] = mapped_column(Integer, default=0)
+    wins: Mapped[int] = mapped_column(Integer, default=0)
+    losses: Mapped[int] = mapped_column(Integer, default=0)
+    draws: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class CardImageOverride(Base):
+    """A user-supplied replacement image URL for a card whose art is missing or
+    broken. Applied wherever card art is shown (Card Explorer and the board)."""
+    __tablename__ = "card_image_overrides"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    card_id: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    image_url: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

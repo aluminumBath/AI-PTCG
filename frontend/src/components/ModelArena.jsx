@@ -16,12 +16,15 @@ function Toggle({ on, onClick, children, color }) {
   );
 }
 
+const ARENA_JOB_KEY = 'tcg.arena.job';
+
 export default function ModelArena({ models, decks }) {
   const [picked, setPicked] = useState([]);
   const [pickedDecks, setPickedDecks] = useState([]);
   const [games, setGames] = useState(6);
   const [job, setJob] = useState(null);
   const [status, setStatus] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
   const poll = useRef(null);
 
   useEffect(() => {
@@ -33,6 +36,43 @@ export default function ModelArena({ models, decks }) {
     if (decks?.length && pickedDecks.length === 0) setPickedDecks(decks.slice(0, 3));
   }, [decks]);
 
+  function startPolling(jobId) {
+    clearInterval(poll.current);
+    poll.current = setInterval(async () => {
+      try {
+        const s = await api.tournamentStatus(jobId);
+        setStatus(s);
+        if (s.status !== 'running') {
+          clearInterval(poll.current);
+          setCancelling(false);
+          localStorage.removeItem(ARENA_JOB_KEY);  // job is terminal; drop the handle
+        }
+      } catch (e) {
+        clearInterval(poll.current);  // job gone (server restart) — stop and clear
+        localStorage.removeItem(ARENA_JOB_KEY);
+      }
+    }, 1200);
+  }
+
+  // re-attach to a running/finished job after a tab switch or full refresh
+  useEffect(() => {
+    const saved = localStorage.getItem(ARENA_JOB_KEY);
+    if (!saved) return;
+    setJob(saved);
+    api.tournamentStatus(saved).then((s) => {
+      setStatus(s);
+      if (s.status === 'running') startPolling(saved);
+      else localStorage.removeItem(ARENA_JOB_KEY);
+    }).catch(() => localStorage.removeItem(ARENA_JOB_KEY));
+    return () => clearInterval(poll.current);
+  }, []);
+
+  async function stop() {
+    if (!job) return;
+    setCancelling(true);
+    try { await api.cancelTournament(job); } catch (e) { setCancelling(false); }
+  }
+
   const labelOf = (id) => models?.find((m) => m.id === id)?.label || id;
   const familyOf = (id) => models?.find((m) => m.id === id)?.family;
 
@@ -40,25 +80,29 @@ export default function ModelArena({ models, decks }) {
     setList(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   }
 
+  function randomizeDecks() {
+    const all = decks || [];
+    if (all.length < 2) { setPickedDecks([...all]); return; }
+    const count = Math.min(all.length, 3 + Math.floor(Math.random() * 4)); // 3–6
+    const shuffled = [...all].sort(() => Math.random() - 0.5);
+    setPickedDecks(shuffled.slice(0, Math.max(2, count)));
+  }
+
   async function run() {
     if (picked.length < 2 || pickedDecks.length === 0) return;
     setStatus(null);
     const r = await api.runTournament(picked, pickedDecks, games);
     setJob(r.job_id);
+    localStorage.setItem(ARENA_JOB_KEY, r.job_id);  // survive tab switch / refresh
     setStatus({ status: 'running', done: 0, total: r.total_games });
-    clearInterval(poll.current);
-    poll.current = setInterval(async () => {
-      const s = await api.tournamentStatus(r.job_id);
-      setStatus(s);
-      if (s.status !== 'running') clearInterval(poll.current);
-    }, 1200);
+    startPolling(r.job_id);
   }
   useEffect(() => () => clearInterval(poll.current), []);
 
-  const result = status?.status === 'done' ? status.result : null;
+  const result = (status?.status === 'done' || status?.status === 'cancelled') ? status.result : null;
   const running = status?.status === 'running';
   const pct = status?.total ? Math.round((status.done / status.total) * 100) : 0;
-  const hasSlow = picked.some((id) => ['mcts', 'rl_mcts'].includes(id));
+  const hasSlow = picked.some((id) => ['mcts', 'rl_mcts', 'ismcts', 'flat_mc', 'council', 'prime', 'meta_top3'].includes(id));
 
   return (
     <div>
@@ -79,7 +123,14 @@ export default function ModelArena({ models, decks }) {
           ))}
         </div>
 
-        <div className="nav-label" style={{ padding: '16px 0 8px' }}>Decks (your dataset)</div>
+        <div className="row between" style={{ padding: '16px 0 8px', alignItems: 'center' }}>
+          <div className="nav-label" style={{ padding: 0 }}>Decks (your dataset)</div>
+          <div className="row" style={{ gap: 6 }}>
+            <button type="button" className="btn sm" onClick={randomizeDecks}>🎲 Randomize</button>
+            <button type="button" className="btn sm" onClick={() => setPickedDecks([...(decks || [])])}>All</button>
+            <button type="button" className="btn sm" onClick={() => setPickedDecks([])}>Clear</button>
+          </div>
+        </div>
         <div className="chips">
           {(decks || []).map((d) => (
             <Toggle key={d} on={pickedDecks.includes(d)} onClick={() => toggle(pickedDecks, setPickedDecks, d)}>
@@ -94,11 +145,16 @@ export default function ModelArena({ models, decks }) {
               onChange={(e) => setGames(Math.max(1, Math.min(30, +e.target.value || 1)))} style={{ width: 90 }} />
           </label>
           <div className="grow" />
+          {running && (
+            <button className="btn danger" onClick={stop} disabled={cancelling} style={{ alignSelf: 'end', marginRight: 8 }}>
+              {cancelling ? 'Stopping…' : 'Stop'}
+            </button>
+          )}
           <button className="btn primary" onClick={run} disabled={running || picked.length < 2 || pickedDecks.length === 0} style={{ alignSelf: 'end' }}>
             {running ? <span className="spin" /> : 'Run tournament'}
           </button>
         </div>
-        {hasSlow && <p className="sub" style={{ marginTop: 10, fontSize: 12 }}>Heads up: MCTS and RL+MCTS are search-heavy (~seconds per move), so tournaments including them take noticeably longer.</p>}
+        {hasSlow && <p className="sub" style={{ marginTop: 10, fontSize: 12 }}>Heads up: the search-heavy and ensemble models (MCTS, ISMCTS, RL+MCTS, Council, Prime, Meta) run several seconds per move, so tournaments including them take noticeably longer.</p>}
       </div>
 
       {running && (
@@ -108,6 +164,16 @@ export default function ModelArena({ models, decks }) {
             <span className="tag">{status.done} / {status.total} games</span>
           </div>
           <div className="bar"><div className="bar-fill" style={{ width: `${pct}%` }} /></div>
+          <p className="sub" style={{ marginTop: 8, fontSize: 12 }}>This runs on the server — you can switch tabs or refresh and it keeps going. Use Stop to end it early (partial results are kept).</p>
+        </div>
+      )}
+
+      {status?.status === 'cancelled' && (
+        <div className="panel pad" style={{ marginBottom: 16 }}>
+          <span className="tag warn">Stopped</span>
+          <span className="sub" style={{ marginLeft: 8, fontSize: 13 }}>
+            Tournament stopped after {result?.games_played ?? 0} of {result?.total_games ?? 0} games — partial standings below.
+          </span>
         </div>
       )}
 

@@ -583,5 +583,12 @@ class GameEngine:
     # Cloning (for MCTS / search)
     # ------------------------------------------------------------------ #
     def clone(self) -> "GameEngine":
-        new_state = copy.deepcopy(self.state)
-        return GameEngine(new_state, random.Random(self.rng.random()))
+        # Deep-copy the RNG *state* too. Search agents (MCTS/ISMCTS) clone the
+        # engine repeatedly and replay action chains down a shared tree; if each
+        # clone had a different RNG, a shuffle/draw would deal a different hand on
+        # replay and a stored action's hand_index could fall off the end. Copying
+        # the RNG makes replay deterministic, and (unlike drawing a fresh seed
+        # from self.rng) leaves the original engine's RNG untouched.
+        new = GameEngine(copy.deepcopy(self.state), random.Random())
+        new.rng = copy.deepcopy(self.rng)
+        return new

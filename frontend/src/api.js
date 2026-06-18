@@ -52,7 +52,9 @@ export const api = {
   rules: () => req('/api/rules'),
   sources: () => req('/api/sources'),
   competitionInfo: () => req('/api/competition/info'),
+  sets: () => req('/api/sets'),
   competitionReport: (body) => req('/api/competition/report', { method: 'POST', body }),
+  competitionReportStatus: (jobId) => req(`/api/competition/report/${jobId}`),
   // ladder / submissions
   submissionsList: () => req('/api/submissions'),
   createSubmission: (body) => req('/api/submissions', { method: 'POST', body }),
@@ -61,9 +63,19 @@ export const api = {
   deleteSubmission: (id) => req(`/api/submissions/${id}`, { method: 'DELETE' }),
   runEpisodes: (count) => req('/api/episodes/run', { method: 'POST', body: { count } }),
   episodeStatus: (jobId) => req(`/api/episodes/status/${jobId}`),
+  cancelEpisodes: (jobId) => req(`/api/episodes/${jobId}/cancel`, { method: 'POST' }),
+  // lifetime model scoreboard
+  modelStats: () => req('/api/models/stats'),
+  modelStatsReset: () => req('/api/models/stats/reset', { method: 'POST' }),
+  modelDocs: () => req('/api/models/docs'),
+  modelExport: (id) => req(`/api/models/${id}/export`),
+  modelsExportAll: () => req('/api/models/export'),
+  setCardImage: (id, url) => req(`/api/cards/${id}/image`, { method: 'POST', body: { url } }),
+  clearCardImage: (id) => req(`/api/cards/${id}/image`, { method: 'DELETE' }),
   importDeck: (name, list) => req('/api/decks/import', { method: 'POST', body: { name, list } }),
   runTournament: (agents, decks, games_per_pairing) =>
     req('/api/tournament/run', { method: 'POST', body: { agents, decks, games_per_pairing } }),
   tournamentStatus: (jobId) => req(`/api/tournament/${jobId}`),
+  cancelTournament: (jobId) => req(`/api/tournament/${jobId}/cancel`, { method: 'POST' }),
   adminUsers: () => req('/api/admin/users', { auth: true }),
 };

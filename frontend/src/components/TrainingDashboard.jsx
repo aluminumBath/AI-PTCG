@@ -34,14 +34,18 @@ function LineChart({ series, height = 240, yMax = 1, yLabel = '' }) {
 export default function TrainingDashboard() {
   const [metrics, setMetrics] = useState(null);
   const [note, setNote] = useState('');
+  const [err, setErr] = useState('');
   const [auto, setAuto] = useState(true);
 
   async function load() {
     try {
       const r = await api.metrics();
-      setMetrics(r.metrics || []);
+      // keep only well-formed numeric rows so one bad entry can't break the view
+      const clean = (r.metrics || []).filter((m) => Number.isFinite(Number(m.winrate_recent)));
+      setMetrics(clean);
       setNote(r.note || '');
-    } catch (e) { setNote(String(e.message)); }
+      setErr('');
+    } catch (e) { setErr(String(e.message || e)); }
   }
   useEffect(() => { load(); }, []);
   useEffect(() => {
@@ -60,6 +64,8 @@ export default function TrainingDashboard() {
         <p className="sub">Live read-out from the PPO self-play trainer. Win rate is the trailing average against the current opponent; the policy improves as it learns to develop its board and time lethal attacks.</p>
       </div>
 
+      {err && <div className="err" style={{ marginBottom: 14 }}>Couldn't load training metrics: {err}</div>}
+
       {(!metrics || metrics.length === 0) ? (
         <div className="panel pad">
           <b style={{ fontFamily: 'var(--display)' }}>No training data yet</b>
@@ -71,11 +77,11 @@ export default function TrainingDashboard() {
       ) : (
         <>
           <div className="stat-grid" style={{ marginBottom: 16 }}>
-            <div className="panel stat"><div className="k">Win rate (trailing)</div><div className="v">{(last.winrate_recent * 100).toFixed(0)}<small>%</small></div></div>
-            <div className="panel stat"><div className="k">Updates</div><div className="v">{last.update}</div></div>
-            <div className="panel stat"><div className="k">Episodes</div><div className="v">{last.episodes}</div></div>
-            <div className="panel stat"><div className="k">Opponent</div><div className="v" style={{ fontSize: 20 }}>{last.opponent}</div></div>
-            <div className="panel stat"><div className="k">Entropy</div><div className="v">{last.entropy?.toFixed(2)}</div></div>
+            <div className="panel stat"><div className="k">Win rate (trailing)</div><div className="v">{((last.winrate_recent ?? 0) * 100).toFixed(0)}<small>%</small></div></div>
+            <div className="panel stat"><div className="k">Updates</div><div className="v">{last.update ?? metrics.length}</div></div>
+            <div className="panel stat"><div className="k">Episodes</div><div className="v">{last.episodes ?? '—'}</div></div>
+            <div className="panel stat"><div className="k">Opponent</div><div className="v" style={{ fontSize: 20 }}>{last.opponent ?? '—'}</div></div>
+            <div className="panel stat"><div className="k">Entropy</div><div className="v">{Number.isFinite(Number(last.entropy)) ? Number(last.entropy).toFixed(2) : '—'}</div></div>
           </div>
 
           <div className="panel chart-wrap" style={{ marginBottom: 16 }}>
@@ -86,8 +92,8 @@ export default function TrainingDashboard() {
             </div>
             <LineChart yMax={1} yLabel="win rate"
               series={[
-                { name: 'recent', color: 'var(--grass)', points: metrics.map((m, i) => ({ x: i, y: m.winrate_recent })) },
-                { name: 'per-update', color: 'var(--psychic)', points: metrics.map((m, i) => ({ x: i, y: m.winrate_update })) },
+                { name: 'recent', color: 'var(--grass)', points: metrics.map((m, i) => ({ x: i, y: Number(m.winrate_recent) || 0 })) },
+                { name: 'per-update', color: 'var(--psychic)', points: metrics.map((m, i) => ({ x: i, y: Number(m.winrate_update) || 0 })) },
               ]} />
             <div className="chart-legend">
               <span><i style={{ background: 'var(--grass)' }} />Trailing win rate</span>
@@ -97,8 +103,8 @@ export default function TrainingDashboard() {
 
           <div className="panel chart-wrap">
             <b style={{ fontFamily: 'var(--display)' }}>Value loss</b>
-            <LineChart yMax={Math.max(...metrics.map((m) => m.value_loss), 0.5)} yLabel="MSE"
-              series={[{ name: 'value', color: 'var(--water)', points: metrics.map((m, i) => ({ x: i, y: m.value_loss })) }]} />
+            <LineChart yMax={Math.max(...metrics.map((m) => Number(m.value_loss) || 0), 0.5)} yLabel="MSE"
+              series={[{ name: 'value', color: 'var(--water)', points: metrics.map((m, i) => ({ x: i, y: Number(m.value_loss) || 0 })) }]} />
           </div>
         </>
       )}

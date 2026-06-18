@@ -124,6 +124,7 @@ select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); ou
 label.field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
 
 .tag { font-family: var(--mono); font-size: 10px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.tag.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
 .pill { font-family: var(--mono); font-size: 11px; padding: 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
 
 /* ---------------- Battle board ---------------- */
@@ -273,6 +274,8 @@ table.matrix td { border-bottom: 1px solid var(--void); border-radius: 4px; }
 select.input { cursor: pointer; }
 .sigbar { height: 4px; background: rgba(255,255,255,.07); border-radius: 3px; margin-top: 4px; overflow: hidden; }
 .sigbar > div { height: 100%; background: var(--warn); opacity: .65; }
+.winbar { height: 4px; background: rgba(255,255,255,.07); border-radius: 3px; margin-top: 4px; overflow: hidden; }
+.winbar > div { height: 100%; background: var(--ok); opacity: .8; }
 .badge { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
   padding: 2px 7px; border-radius: 100px; border: 1px solid var(--line); }
 .badge.active { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
@@ -285,6 +288,55 @@ select.input { cursor: pointer; }
 .btn.danger:hover { border-color: color-mix(in srgb, var(--bad) 50%, transparent); }
 .legend { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); font-family: var(--mono); }
 .legend i { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
+
+/* ---------------- Model explainer modal ---------------- */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center; z-index: 60; padding: 20px; }
+.modal { background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--r);
+  width: min(720px, 100%); max-height: 86vh; overflow: auto; box-shadow: 0 24px 80px rgba(0,0,0,.5); }
+.modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+  padding: 18px 20px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); }
+.modal-body { padding: 18px 20px; }
+.modal-body h4 { font-family: var(--display); font-size: 13px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--accent); margin: 16px 0 6px; }
+.modal-body p { font-size: 13.5px; line-height: 1.6; color: var(--ink); margin: 0; }
+.modal-body .lead { font-size: 14px; color: var(--muted); }
+.tbl.compact td, .tbl.compact th { padding: 7px 10px; font-size: 12.5px; }
+.ticks { margin: 4px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
+.ticks li::marker { color: var(--ok); }
+.ticks.warn li::marker { color: var(--warn); }
+.ii-note { margin-top: 16px; padding: 10px 14px; border-radius: var(--r-sm);
+  background: var(--accent-soft); border: 1px solid var(--line); font-size: 12.5px; line-height: 1.5; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover { background: rgba(255,255,255,.03); }
+
+/* ---------------- Card image editing ---------------- */
+.cardx-img { position: relative; }
+.empty-slot span { font-size: 11px; }
+.img-edit { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border-radius: 6px;
+  border: 1px solid var(--line-strong); background: rgba(0,0,0,.55); color: var(--ink); cursor: pointer;
+  font-size: 12px; line-height: 1; display: flex; align-items: center; justify-content: center; }
+.img-edit:hover { border-color: var(--accent); color: var(--accent); }
+.img-flag { position: absolute; bottom: 6px; left: 6px; font-family: var(--mono); font-size: 9px;
+  text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px; border-radius: 100px;
+  background: rgba(0,0,0,.6); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); color: var(--accent); }
+.img-editor { padding: 8px; }
+.err.sm { font-size: 11px; padding: 4px 8px; margin-top: 6px; }
+
+/* ---------------- Decks reference ---------------- */
+.set-chip { font-size: 12px; padding: 5px 11px; border-radius: 100px; border: 1px solid var(--line);
+  background: rgba(255,255,255,.03); }
+.set-chip .mono { color: var(--faint); font-size: 11px; }
+.deck-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+.deck-card { display: flex; flex-direction: column; }
+.deck-thumb { width: 64px; height: 89px; object-fit: cover; border-radius: 6px; flex-shrink: 0;
+  border: 1px solid var(--line); background: rgba(255,255,255,.03); }
+.deck-name { font-family: var(--display); font-weight: 600; font-size: 15px; text-transform: capitalize; }
+.type-tag { font-size: 10.5px; font-family: var(--mono); text-transform: uppercase; letter-spacing: .04em;
+  padding: 2px 8px; border-radius: 100px; color: var(--tc); border: 1px solid color-mix(in srgb, var(--tc) 45%, transparent); }
+.deck-strategy { font-size: 13px; line-height: 1.55; color: var(--muted); margin: 12px 0; flex: 1; }
+.keycards { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.kc-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--faint); margin-right: 2px; }
 .winner { font-family: var(--display); font-weight: 700; font-size: 18px; color: var(--accent); }
 .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line-strong); border-top-color: var(--accent); border-radius: 50%; animation: rot .7s linear infinite; }
 @keyframes rot { to { transform: rotate(360deg); } }

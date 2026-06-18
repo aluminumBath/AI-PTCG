@@ -7,13 +7,23 @@ rules-faithful environment — plus a polished web app to **watch** agents duel,
 - **Rules engine** — a faithful Standard-format engine: evolution lines, energy
   attachment, abilities, trainers, retreat, status conditions, weakness/
   resistance, prizes (incl. multi-prize `ex` Pokémon), and all win conditions.
-- **Seven model types** — `random`, `heuristic`, `minimax` (lookahead),
-  `mcts`, `ismcts` (Information-Set MCTS for **imperfect information** — samples
-  hidden cards instead of peeking), `rl` (PPO self-play net), and `rl_mcts`
-  (value-network-guided search). Spanning baseline, rule-based, search, learned,
-  and hybrid families.
+- **Fifteen model types** — `random`, `heuristic`, and three alternative
+  heuristic *strategies* (`aggro`, `control`, `setup`); the search family
+  `greedy`, `minimax`, `mcts`, `flat_mc`, and `ismcts` (Information-Set MCTS for
+  **imperfect information**); the learned `rl` (PPO self-play net) and hybrid
+  `rl_mcts`; and three **ensemble / meta** agents that combine the others:
+  `council` (every model casts a weighted vote), `prime` (a vote of only the
+  strongest models — learned + search + hidden-info + rule-based — guarded by a
+  Minimax safety veto), and `meta_top3` (a **dynamic** vote among the current
+  top-3 models on the scoreboard, re-resolved whenever the leaderboard changes).
+  Spanning baseline, rule-based, search, learned, hybrid, and ensemble families;
+  each documented in the **Model scores** explainer modal.
 - **Model arena** — run a round-robin between any models across your decks and
   rank them by win rate, with a head-to-head matrix, to find the best opponent.
+  Tournaments (and ladder episode runs) execute **server-side as background
+  jobs**: they keep running if you switch tabs or refresh — the UI re-attaches
+  to the job and shows progress — and a **Stop** button cancels at the next game
+  boundary while keeping the partial results.
 - **RL self-play** — a PPO trainer with league-style self-play, checkpoints, and
   a live metrics feed for the dashboard.
 - **Deck import** — paste a Pokémon TCG Live decklist; it's validated against the
@@ -25,13 +35,16 @@ rules-faithful environment — plus a polished web app to **watch** agents duel,
 > **Honest scope.** The official API (pokemontcg.io) provides card *data* —
 > names, text, images, set legality — but **not executable rules**. Each card's
 > behaviour is hand-authored in `backend/engine/effects.py`. The engine ships
-> with six faithful, rules-legal Standard archetypes — **Charizard ex** and
-> **Gardevoir ex** (Stage-2 evolution midrange), **Miraidon ex** and **Roaring
-> Moon ex** (all-Basic aggro), and **Chien-Pao ex** (Water) and **Iron Valiant
-> ex** (Psychic) — every deck validated as exactly 60 cards under the 4-copy
-> rule. It is built to extend: add a card, implement its effect, drop it in a
-> deck. The Card Explorer browses the full live card list; the battle engine
-> plays the implemented pool.
+> with **twenty-two** faithful, rules-legal Standard archetypes spanning every
+> energy type **and a range of strategies** — evolution midrange, all-Basic
+> aggro, energy-acceleration combo, scaling midrange, bench spread, status
+> disruption (Burn, Poison/Sleep), healing control, a Colorless toolbox, a
+> single-prize prize-trade deck, plus draw-engine and tanky-control aces —
+> drawn from twelve expansions and each validated as exactly 60 cards under the
+> 4-copy rule. The **Decks** tab documents every deck's game plan, key cards and
+> ace-card art (`GET /api/decks` · `GET /api/sets`), and the Model arena has a
+> 🎲 **Randomize** button to pick a random deck slate for a tournament. Add a
+> card, implement its effect, drop it in a deck to extend.
 
 > **Rules & attribution.** The engine enforces the official rules (turn
 > structure, the first-player turn-1 restrictions, the Pokémon Checkup for
@@ -209,6 +222,28 @@ See `tests/README.md` for details and how to extend to browser-level UI tests.
 spins up Postgres, runs the engine smoke test, boots the API, runs the full Robot
 suite against it, and builds the frontend. Test reports are uploaded as an
 artifact.
+
+## Model scoreboard (lifetime scores)
+
+Every game that involves a model — **Watch**, **Play vs AI**, the **Model
+Arena**, and **ladder episodes** — is recorded into a persistent per-model
+aggregate (`backend/stats/model_stats.py`, table `model_stats`). The **Model
+scores** tab ranks models by win rate and shows games, W/L/D, points
+(win = 1, draw = ½) and points-per-game, with one-click **JSON / CSV export**
+(`GET /api/models/stats`, `/api/models/stats/export?format=csv`). Report-only
+games used to generate the Strategy writeup are excluded so they don't inflate
+the lifetime record.
+
+Each row opens a **model explainer** modal — what the model is, *why* it was
+chosen, how it works, and a table of its variables with the values used — and
+exports that model's manifest in one click (`GET /api/models/{id}/export`), or
+all of them at once (`/api/models/export`). Full prose lives in
+`backend/agents/model_docs.py` (`GET /api/models/docs`).
+
+If a card's official art is missing or broken, you can paste a replacement URL
+right on the card in the **Card explorer**; the override persists
+(`POST /api/cards/{id}/image`) and is applied everywhere that card's art shows,
+including the battle board.
 
 ## Skill-rating ladder (Submissions)
 

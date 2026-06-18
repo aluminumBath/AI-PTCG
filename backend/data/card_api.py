@@ -110,7 +110,7 @@ def _slim(c: dict) -> dict:
 
 
 def _fallback_cards(query: str) -> list[dict]:
-    from .cards_db import CATALOG
+    from .cards_db import CATALOG, set_name
     out = []
     for cd in CATALOG.values():
         if query and query.lower() not in cd.name.lower():
@@ -118,7 +118,7 @@ def _fallback_cards(query: str) -> list[dict]:
         out.append({
             "id": cd.id, "name": cd.name, "supertype": cd.category.value,
             "hp": cd.hp or None, "types": [t.value for t in cd.types],
-            "image": cd.image or None, "set": cd.set_code,
+            "image": cd.image or None, "set": set_name(cd.id) or cd.set_code,
             "battle_ready": True,
         })
     return out

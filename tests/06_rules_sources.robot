@@ -28,12 +28,35 @@ New Decks Are Available
     ${decks}=    GET On Session    tcg    /api/decks
     Should Contain    ${decks.json()}[decks]    chien_pao_ex
     Should Contain    ${decks.json()}[decks]    iron_valiant_ex
+    Should Contain    ${decks.json()}[decks]    pecharunt_ex
+    Should Contain    ${decks.json()}[decks]    lugia_ex
+    Should Contain    ${decks.json()}[decks]    tapu_koko
+    Should Contain    ${decks.json()}[decks]    flutter_mane_ex
+    Should Contain    ${decks.json()}[decks]    terapagos_ex
 
-New Decks Are Playable
+Decks Carry Strategy Metadata And Images
+    ${decks}=    GET On Session    tcg    /api/decks
+    Should Not Be Empty    ${decks.json()}[meta]
+    ${entei}=    Evaluate    [d for d in $decks.json()['meta'] if d['id']=='entei_ex'][0]
+    Should Not Be Empty    ${entei}[strategy]
+    Should Not Be Empty    ${entei}[key_cards]
+    Should Be Equal    ${entei}[type]    Fire
+    ${gho}=    Evaluate    [d for d in $decks.json()['meta'] if d['id']=='gholdengo_ex'][0]
+    Should Not Be Empty    ${gho}[image]
+
+Built-In Sets Are Listed
+    ${r}=    GET On Session    tcg    /api/sets
+    ${n}=    Get Length    ${r.json()}[sets]
+    Should Be True    ${n} >= 12
+    ${names}=    Evaluate    " ".join(s['name'] for s in $r.json()['sets'])
+    Should Contain    ${names}    Obsidian Flames
+
+New Strategy Decks Are Playable
     [Template]    Deck Plays To Completion
-    chien_pao_ex      iron_valiant_ex
-    chien_pao_ex      charizard_ex
-    iron_valiant_ex   gardevoir_ex
+    pecharunt_ex      suicune_ex
+    lugia_ex          tapu_koko
+    flutter_mane_ex   gholdengo_ex
+    raging_bolt_ex    terapagos_ex
 
 
 *** Keywords ***

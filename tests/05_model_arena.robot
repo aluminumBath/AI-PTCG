@@ -36,8 +36,28 @@ Tournament Ranks The Models
 Unknown Tournament Id Is Not Found
     GET On Session    tcg    /api/tournament/nope    expected_status=404
 
+Tournament Can Be Cancelled And Keeps Partial Results
+    ${agents}=    Create List    heuristic    greedy    minimax
+    ${decks}=    Create List    charizard_ex    gardevoir_ex
+    ${body}=    Create Dictionary    agents=${agents}    decks=${decks}    games_per_pairing=${12}
+    ${start}=    POST On Session    tcg    /api/tournament/run    json=${body}    expected_status=200
+    ${job}=    Set Variable    ${start.json()}[job_id]
+    ${c}=    POST On Session    tcg    /api/tournament/${job}/cancel    expected_status=200
+    Wait Until Keyword Succeeds    60x    1s    Tournament Is Terminal    ${job}
+    ${final}=    GET On Session    tcg    /api/tournament/${job}
+    Should Be True    '${final.json()}[status]' in ['cancelled', 'done']
+    Should Not Be Empty    ${final.json()}[result][standings]
+
+Episodes Cancel Endpoint Is Wired
+    POST On Session    tcg    /api/episodes/nope/cancel    expected_status=404
+
 
 *** Keywords ***
+Tournament Is Terminal
+    [Arguments]    ${job}
+    ${r}=    GET On Session    tcg    /api/tournament/${job}
+    Should Not Be Equal    ${r.json()}[status]    running
+
 Wait For Tournament
     [Arguments]    ${job}    ${max_polls}=60
     FOR    ${i}    IN RANGE    ${max_polls}

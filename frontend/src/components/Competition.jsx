@@ -1,31 +1,64 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 
 const STATUS_COLOR = { ready: 'var(--ok)', pending: 'var(--warn)' };
 
+// module-scoped so an in-flight (or finished) report survives leaving and
+// re-entering the Competition tab — the job keeps running on the server.
+const reportStore = { jobId: null, status: null, progress: 0, total: 0, markdown: null, best: null, filename: null };
+
 export default function Competition() {
   const [info, setInfo] = useState(null);
-  const [report, setReport] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const [report, setReport] = useState(reportStore.markdown ? { ...reportStore } : null);
+  const [run, setRun] = useState(reportStore.jobId ? { ...reportStore } : null);
   const [err, setErr] = useState('');
+  const poll = useRef(null);
 
   useEffect(() => { api.competitionInfo().then(setInfo).catch((e) => setErr(e.message)); }, []);
 
-  async function generate() {
-    setBusy(true); setErr(''); setReport(null);
-    try {
-      const r = await api.competitionReport({
-        agents: ['heuristic', 'minimax', 'rl', 'ismcts'],
-        decks: ['charizard_ex', 'gardevoir_ex', 'miraidon_ex'],
-        games_per_pairing: 4,
-      });
-      setReport(r);
-    } catch (e) { setErr(e.message); }
-    finally { setBusy(false); }
+  function startPolling() {
+    clearInterval(poll.current);
+    poll.current = setInterval(async () => {
+      if (!reportStore.jobId) { clearInterval(poll.current); return; }
+      try {
+        const st = await api.competitionReportStatus(reportStore.jobId);
+        Object.assign(reportStore, st);
+        setRun({ ...reportStore });
+        if (st.status !== 'running') {
+          clearInterval(poll.current);
+          if (st.status === 'done') setReport({ ...reportStore });
+          if (st.status === 'error') setErr(st.error || 'report failed');
+        }
+      } catch (e) { /* keep polling; transient */ }
+    }, 1500);
   }
 
+  // re-attach to a still-running job when returning to the tab
+  useEffect(() => {
+    if (reportStore.jobId && reportStore.status === 'running') { setRun({ ...reportStore }); startPolling(); }
+    return () => clearInterval(poll.current);
+  }, []);
+
+  async function generate() {
+    setErr(''); setReport(null);
+    Object.assign(reportStore, { jobId: null, status: 'running', progress: 0, total: 0, markdown: null, best: null });
+    setRun({ ...reportStore });
+    try {
+      const r = await api.competitionReport({
+        agents: ['heuristic', 'greedy', 'minimax', 'rl'],
+        decks: ['charizard_ex', 'gardevoir_ex', 'miraidon_ex'],
+        games_per_pairing: 3,
+      });
+      reportStore.jobId = r.job_id; reportStore.status = 'running';
+      setRun({ ...reportStore });
+      startPolling();
+    } catch (e) { setErr(e.message); reportStore.status = 'error'; }
+  }
+
+  const busy = run?.status === 'running';
+
   function download() {
-    if (!report) return;
+    if (!report?.markdown) return;
     const blob = new Blob([report.markdown], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -84,11 +117,18 @@ export default function Competition() {
                 <button className="btn primary sm" onClick={generate} disabled={busy}>
                   {busy ? <span className="spin" /> : 'Generate from live tournament'}
                 </button>
-                {report && <button className="btn sm" onClick={download}>Download .md</button>}
+                {report?.markdown && <button className="btn sm" onClick={download}>Download .md</button>}
               </div>
             </div>
-            {busy && <p className="sub" style={{ marginTop: 10 }}>Running matches and writing the report…</p>}
-            {report && (
+            {busy && (
+              <div style={{ marginTop: 10 }}>
+                <div className="bar"><div className="bar-fill" style={{ width: `${run?.total ? (100 * run.progress) / run.total : 12}%` }} /></div>
+                <p className="sub" style={{ fontSize: 12, marginTop: 6 }}>
+                  Running matches and writing the report… {run?.total ? `${run.progress}/${run.total} games` : ''} — you can switch tabs; it keeps running.
+                </p>
+              </div>
+            )}
+            {report?.markdown && (
               <pre className="report" style={{ marginTop: 12 }}>{report.markdown}</pre>
             )}
           </div>

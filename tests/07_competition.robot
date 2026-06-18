@@ -20,10 +20,21 @@ Imperfect-Information ISMCTS Model Is Registered
     Should Contain    ${ids}    ismcts
 
 Strategy Report Is Generated From Live Results
-    ${agents}=    Create List    heuristic    minimax    rl
+    ${agents}=    Create List    heuristic    greedy
     ${decks}=    Create List    charizard_ex    gardevoir_ex
     ${body}=    Create Dictionary    agents=${agents}    decks=${decks}    games_per_pairing=${2}
     ${r}=    POST On Session    tcg    /api/competition/report    json=${body}    expected_status=200
-    Should Contain    ${r.json()}[markdown]    Strategy Writeup
-    Should Contain    ${r.json()}[markdown]    Leaderboard
-    Should Be Equal    ${r.json()}[filename]    STRATEGY_REPORT.md
+    ${jid}=    Set Variable    ${r.json()}[job_id]
+    Should Be Equal    ${r.json()}[status]    running
+    Wait Until Keyword Succeeds    60x    2s    Report Job Done    ${jid}
+    ${done}=    GET On Session    tcg    /api/competition/report/${jid}
+    Should Contain    ${done.json()}[markdown]    Strategy Writeup
+    Should Contain    ${done.json()}[markdown]    Leaderboard
+    Should Be Equal    ${done.json()}[filename]    STRATEGY_REPORT.md
+
+
+*** Keywords ***
+Report Job Done
+    [Arguments]    ${jid}
+    ${r}=    GET On Session    tcg    /api/competition/report/${jid}
+    Should Be Equal    ${r.json()}[status]    done

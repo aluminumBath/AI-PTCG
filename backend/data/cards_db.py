@@ -72,6 +72,18 @@ WATER_ENERGY = _reg(CardDef(
     id="energy-water", name="Water Energy", category=CardCategory.ENERGY,
     energy_type=E.WATER, is_basic_energy=True, provides=(E.WATER,),
 ))
+GRASS_ENERGY = _reg(CardDef(
+    id="energy-grass", name="Grass Energy", category=CardCategory.ENERGY,
+    energy_type=E.GRASS, is_basic_energy=True, provides=(E.GRASS,),
+))
+FIGHTING_ENERGY = _reg(CardDef(
+    id="energy-fighting", name="Fighting Energy", category=CardCategory.ENERGY,
+    energy_type=E.FIGHTING, is_basic_energy=True, provides=(E.FIGHTING,),
+))
+METAL_ENERGY = _reg(CardDef(
+    id="energy-metal", name="Metal Energy", category=CardCategory.ENERGY,
+    energy_type=E.METAL, is_basic_energy=True, provides=(E.METAL,),
+))
 DOUBLE_TURBO = _reg(CardDef(
     id="energy-double-turbo", name="Double Turbo Energy", category=CardCategory.ENERGY,
     energy_type=E.COLORLESS, is_basic_energy=False, provides=(E.COLORLESS, E.COLORLESS),
@@ -150,8 +162,8 @@ GARDEVOIR_EX = _reg(CardDef(
                     damage=190, effect_id="damage_scales_with_energy_30",
                     text="190 + 30 for each extra Energy on this Pokémon."),),
 ))
-ZACIAN = _reg(CardDef(
-    id="sv-zac", name="Drifloon", category=CardCategory.POKEMON,
+DRIFLOON = _reg(CardDef(
+    id="sv1-89", name="Drifloon", category=CardCategory.POKEMON,
     hp=70, types=(E.PSYCHIC,), stage=Stage.BASIC,
     weakness=E.DARKNESS, retreat_cost=1,
     attacks=(Attack(name="Fly", cost=(E.PSYCHIC,), damage=20,
@@ -287,6 +299,242 @@ IRON_VALIANT_EX = _reg(CardDef(
 ))
 
 
+# --------------------------------------------------------------------------- #
+# Deck 7 — Ogerpon ex (Grass)
+# --------------------------------------------------------------------------- #
+TAROUNTULA = _reg(CardDef(
+    id="sv1-14", name="Tarountula", category=CardCategory.POKEMON,
+    hp=60, types=(E.GRASS,), stage=Stage.BASIC,
+    weakness=E.FIRE, retreat_cost=1,
+    attacks=(Attack(name="Tackle", cost=(E.GRASS,), damage=10),),
+))
+OGERPON_EX = _reg(CardDef(
+    id="sv6-25", name="Ogerpon ex", category=CardCategory.POKEMON,
+    hp=210, types=(E.GRASS,), stage=Stage.BASIC,
+    weakness=E.FIRE, retreat_cost=1, rule_box="ex",
+    attacks=(Attack(name="Leaf Cut", cost=(E.GRASS, E.COLORLESS), damage=60),
+             Attack(name="Bloom Smash", cost=(E.GRASS, E.GRASS, E.COLORLESS),
+                    damage=160, effect_id="discard_energy_self_2",
+                    text="160 damage. Discard 2 Energy from this Pokémon."),),
+))
+
+# --------------------------------------------------------------------------- #
+# Deck 8 — Koraidon ex (Fighting, energy acceleration)
+# --------------------------------------------------------------------------- #
+RIOLU = _reg(CardDef(
+    id="sv4-110", name="Riolu", category=CardCategory.POKEMON,
+    hp=70, types=(E.FIGHTING,), stage=Stage.BASIC,
+    weakness=E.PSYCHIC, retreat_cost=1,
+    attacks=(Attack(name="Jab", cost=(E.FIGHTING,), damage=20),),
+))
+KORAIDON_EX = _reg(CardDef(
+    id="sv5-104", name="Koraidon ex", category=CardCategory.POKEMON,
+    hp=230, types=(E.FIGHTING,), stage=Stage.BASIC,
+    weakness=E.GRASS, retreat_cost=1, rule_box="ex",
+    abilities=(Ability(name="Dino Cry", effect_id="ability_accelerate_energy",
+                       kind="activated",
+                       text="Attach a Fighting Energy from discard to a Pokémon."),),
+    attacks=(Attack(name="Wild Impact", cost=(E.FIGHTING, E.FIGHTING, E.COLORLESS),
+                    damage=220, effect_id="discard_energy_self_2",
+                    text="220 damage. Discard 2 Energy from this Pokémon."),),
+))
+
+# --------------------------------------------------------------------------- #
+# Deck 9 — Dialga ex (Metal)
+# --------------------------------------------------------------------------- #
+KLEFKI = _reg(CardDef(
+    id="sv1-96", name="Klefki", category=CardCategory.POKEMON,
+    hp=70, types=(E.METAL,), stage=Stage.BASIC,
+    weakness=E.FIRE, retreat_cost=1,
+    attacks=(Attack(name="Spike", cost=(E.METAL,), damage=20),),
+))
+DIALGA_EX = _reg(CardDef(
+    id="sv7-113", name="Dialga ex", category=CardCategory.POKEMON,
+    hp=220, types=(E.METAL,), stage=Stage.BASIC,
+    weakness=E.FIRE, retreat_cost=2, rule_box="ex",
+    attacks=(Attack(name="Metal Blast", cost=(E.METAL, E.METAL), damage=70,
+                    effect_id="damage_scales_with_energy_30",
+                    text="70 damage plus 30 more for each extra Energy attached."),
+             Attack(name="Cosmic Crush", cost=(E.METAL, E.METAL, E.COLORLESS),
+                    damage=180, effect_id="discard_energy_self_2",
+                    text="180 damage. Discard 2 Energy from this Pokémon."),),
+))
+
+# --------------------------------------------------------------------------- #
+# Deck 10 — Palkia ex (Water)
+# --------------------------------------------------------------------------- #
+PALKIA_EX = _reg(CardDef(
+    id="sv7-47", name="Palkia ex", category=CardCategory.POKEMON,
+    hp=220, types=(E.WATER,), stage=Stage.BASIC,
+    weakness=E.LIGHTNING, retreat_cost=2, rule_box="ex",
+    attacks=(Attack(name="Subspace Swell", cost=(E.WATER, E.WATER), damage=60,
+                    effect_id="damage_scales_with_energy_30",
+                    text="60 damage plus 30 more for each extra Energy attached."),
+             Attack(name="Spatial Rend", cost=(E.WATER, E.WATER, E.COLORLESS),
+                    damage=200, effect_id="discard_energy_self_2",
+                    text="200 damage. Discard 2 Energy from this Pokémon."),),
+))
+
+# --------------------------------------------------------------------------- #
+# Deck 11 — Zeraora ex (Lightning, bench spread)
+# --------------------------------------------------------------------------- #
+ZERAORA_EX = _reg(CardDef(
+    id="sv5-55", name="Zeraora ex", category=CardCategory.POKEMON,
+    hp=210, types=(E.LIGHTNING,), stage=Stage.BASIC,
+    weakness=E.FIGHTING, retreat_cost=0, rule_box="ex",
+    attacks=(Attack(name="Spark Bolt", cost=(E.LIGHTNING,), damage=30),
+             Attack(name="Plasma Fists", cost=(E.LIGHTNING, E.LIGHTNING, E.COLORLESS),
+                    damage=120, effect_id="bench_damage_2_all_opp",
+                    text="120 damage and 20 to each of the opponent's Benched Pokémon."),),
+))
+
+# --------------------------------------------------------------------------- #
+# Deck 12 — Ho-Oh ex (Fire)
+# --------------------------------------------------------------------------- #
+FUECOCO = _reg(CardDef(
+    id="sv1-36", name="Fuecoco", category=CardCategory.POKEMON,
+    hp=70, types=(E.FIRE,), stage=Stage.BASIC,
+    weakness=E.WATER, retreat_cost=1,
+    attacks=(Attack(name="Ember", cost=(E.FIRE,), damage=20),),
+))
+HO_OH_EX = _reg(CardDef(
+    id="sv3-115", name="Ho-Oh ex", category=CardCategory.POKEMON,
+    hp=220, types=(E.FIRE,), stage=Stage.BASIC,
+    weakness=E.WATER, retreat_cost=2, rule_box="ex",
+    attacks=(Attack(name="Sacred Flame", cost=(E.FIRE, E.COLORLESS), damage=70),
+             Attack(name="Rainbow Burn", cost=(E.FIRE, E.FIRE, E.COLORLESS),
+                    damage=190, effect_id="discard_energy_self_2",
+                    text="190 damage. Discard 2 Energy from this Pokémon."),),
+))
+
+
+# --------------------------------------------------------------------------- #
+# Deck 13 — Entei ex (Fire, Burn aggro)
+# --------------------------------------------------------------------------- #
+ENTEI_EX = _reg(CardDef(
+    id="sv7-22", name="Entei ex", category=CardCategory.POKEMON,
+    hp=210, types=(E.FIRE,), stage=Stage.BASIC,
+    weakness=E.WATER, retreat_cost=2, rule_box="ex",
+    attacks=(Attack(name="Searing Flame", cost=(E.FIRE, E.COLORLESS), damage=50,
+                    effect_id="burn_target", text="50 damage. The opponent's Active is now Burned."),
+             Attack(name="Flare Blitz", cost=(E.FIRE, E.FIRE, E.COLORLESS),
+                    damage=170, effect_id="discard_energy_self_2",
+                    text="170 damage. Discard 2 Energy from this Pokémon."),),
+))
+
+# --------------------------------------------------------------------------- #
+# Deck 14 — Pecharunt ex (Psychic, status disruption)
+# --------------------------------------------------------------------------- #
+PECHARUNT_EX = _reg(CardDef(
+    id="sv8-100", name="Pecharunt ex", category=CardCategory.POKEMON,
+    hp=200, types=(E.PSYCHIC,), stage=Stage.BASIC,
+    weakness=E.DARKNESS, retreat_cost=1, rule_box="ex",
+    attacks=(Attack(name="Toxic Chain", cost=(E.PSYCHIC,), damage=30,
+                    effect_id="poison_target", text="30 damage. The opponent's Active is now Poisoned."),
+             Attack(name="Subjugating Sludge", cost=(E.PSYCHIC, E.PSYCHIC, E.COLORLESS),
+                    damage=130, effect_id="sleep_target",
+                    text="130 damage. The opponent's Active is now Asleep."),),
+))
+
+# --------------------------------------------------------------------------- #
+# Deck 15 — Suicune ex (Water, healing control)
+# --------------------------------------------------------------------------- #
+SUICUNE_EX = _reg(CardDef(
+    id="sv8-46", name="Suicune ex", category=CardCategory.POKEMON,
+    hp=220, types=(E.WATER,), stage=Stage.BASIC,
+    weakness=E.LIGHTNING, retreat_cost=1, rule_box="ex",
+    attacks=(Attack(name="Aurora Gain", cost=(E.WATER, E.COLORLESS), damage=60,
+                    effect_id="heal_self_30", text="60 damage. Heal 30 from this Pokémon."),
+             Attack(name="Hydro Pump", cost=(E.WATER, E.WATER, E.COLORLESS), damage=150),),
+))
+
+# --------------------------------------------------------------------------- #
+# Deck 16 — Genesect ex (Metal, bench spread)
+# --------------------------------------------------------------------------- #
+GENESECT_EX = _reg(CardDef(
+    id="sv9-120", name="Genesect ex", category=CardCategory.POKEMON,
+    hp=210, types=(E.METAL,), stage=Stage.BASIC,
+    weakness=E.FIRE, retreat_cost=2, rule_box="ex",
+    attacks=(Attack(name="Lock-On Beam", cost=(E.METAL, E.COLORLESS), damage=60),
+             Attack(name="Techno Barrage", cost=(E.METAL, E.METAL, E.COLORLESS),
+                    damage=110, effect_id="bench_damage_2_all_opp",
+                    text="110 damage and 20 to each of the opponent's Benched Pokémon."),),
+))
+
+# --------------------------------------------------------------------------- #
+# Deck 17 — Lugia ex (Colorless toolbox)
+# --------------------------------------------------------------------------- #
+BIDOOF = _reg(CardDef(
+    id="sv6-114", name="Bidoof", category=CardCategory.POKEMON,
+    hp=70, types=(E.COLORLESS,), stage=Stage.BASIC,
+    weakness=E.FIGHTING, retreat_cost=1,
+    attacks=(Attack(name="Tackle", cost=(E.COLORLESS,), damage=20),),
+))
+LUGIA_EX = _reg(CardDef(
+    id="sv6-139", name="Lugia ex", category=CardCategory.POKEMON,
+    hp=220, types=(E.COLORLESS,), stage=Stage.BASIC,
+    weakness=E.LIGHTNING, retreat_cost=2, rule_box="ex",
+    attacks=(Attack(name="Aeroblast", cost=(E.COLORLESS, E.COLORLESS), damage=70),
+             Attack(name="Tempest Dive", cost=(E.COLORLESS, E.COLORLESS, E.COLORLESS),
+                    damage=180, effect_id="discard_energy_self_2",
+                    text="180 damage. Discard 2 Energy from this Pokémon."),),
+))
+
+# --------------------------------------------------------------------------- #
+# Deck 18 — Tapu Koko (Lightning, single-prize prize-trade)
+# --------------------------------------------------------------------------- #
+TAPU_KOKO = _reg(CardDef(
+    id="sv10-50", name="Tapu Koko", category=CardCategory.POKEMON,
+    hp=120, types=(E.LIGHTNING,), stage=Stage.BASIC,
+    weakness=E.FIGHTING, retreat_cost=1,
+    attacks=(Attack(name="Spark", cost=(E.LIGHTNING,), damage=20),
+             Attack(name="Thunderbolt Dance", cost=(E.LIGHTNING, E.LIGHTNING),
+                    damage=90, effect_id="bench_damage_2_all_opp",
+                    text="90 damage and 20 to each of the opponent's Benched Pokémon."),),
+))
+
+
+# --------------------------------------------------------------------------- #
+# Decks 19-22 — new aces from later sets (sv11 / sv12)
+# --------------------------------------------------------------------------- #
+FLUTTER_MANE_EX = _reg(CardDef(
+    id="sv11-78", name="Flutter Mane ex", category=CardCategory.POKEMON,
+    hp=200, types=(E.PSYCHIC,), stage=Stage.BASIC,
+    weakness=E.METAL, retreat_cost=1, rule_box="ex",
+    attacks=(Attack(name="Midnight Wing", cost=(E.PSYCHIC,), damage=40),
+             Attack(name="Phantom Gust", cost=(E.PSYCHIC, E.PSYCHIC), damage=120,
+                    effect_id="trainer_boss_orders",
+                    text="120 damage. Switch one of the opponent's Benched Pokémon to the Active Spot before this attack."),),
+))
+RAGING_BOLT_EX = _reg(CardDef(
+    id="sv11-123", name="Raging Bolt ex", category=CardCategory.POKEMON,
+    hp=220, types=(E.LIGHTNING,), stage=Stage.BASIC,
+    weakness=E.FIGHTING, retreat_cost=2, rule_box="ex",
+    attacks=(Attack(name="Bellowing Thunder", cost=(E.LIGHTNING, E.LIGHTNING, E.COLORLESS),
+                    damage=70, effect_id="damage_scales_with_energy_30",
+                    text="70 + 30 for each extra Energy on this Pokémon."),),
+))
+GHOLDENGO_EX = _reg(CardDef(
+    id="sv12-90", name="Gholdengo ex", category=CardCategory.POKEMON,
+    hp=220, types=(E.METAL,), stage=Stage.BASIC,
+    weakness=E.FIRE, retreat_cost=2, rule_box="ex",
+    attacks=(Attack(name="Coin Bonus", cost=(E.METAL, E.COLORLESS), damage=50,
+                    effect_id="ability_draw_2", text="50 damage. Draw 2 cards."),
+             Attack(name="Make It Rain", cost=(E.METAL, E.METAL, E.COLORLESS),
+                    damage=160, effect_id="discard_energy_self_2",
+                    text="160 damage. Discard 2 Energy from this Pokémon."),),
+))
+TERAPAGOS_EX = _reg(CardDef(
+    id="sv12-128", name="Terapagos ex", category=CardCategory.POKEMON,
+    hp=230, types=(E.COLORLESS,), stage=Stage.BASIC,
+    weakness=E.FIGHTING, retreat_cost=3, rule_box="ex",
+    attacks=(Attack(name="Crystal Guard", cost=(E.COLORLESS, E.COLORLESS), damage=60,
+                    effect_id="heal_self_30", text="60 damage. Heal 30 from this Pokémon."),
+             Attack(name="Unified Beatdown", cost=(E.COLORLESS, E.COLORLESS, E.COLORLESS),
+                    damage=140),),
+))
+
+
 def _deck(spec: list[tuple[CardDef, int]]) -> list[CardDef]:
     """Build a deck, enforcing the official deck-construction rules:
     exactly 60 cards, and at most 4 copies of any card *except* Basic Energy
@@ -320,7 +568,7 @@ def charizard_deck() -> list[CardDef]:
 def gardevoir_deck() -> list[CardDef]:
     return _deck([
         (RALTS, 4), (KIRLIA, 3), (GARDEVOIR_EX, 3),
-        (ZACIAN, 3),
+        (DRIFLOON, 3),
         (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
         (SWITCH, 2), (POTION, 2),
         (PSYCHIC_ENERGY, 28), (DOUBLE_TURBO, 4),
@@ -363,6 +611,151 @@ def iron_valiant_deck() -> list[CardDef]:
     ])
 
 
+def ogerpon_deck() -> list[CardDef]:
+    return _deck([
+        (OGERPON_EX, 4), (TAROUNTULA, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (GRASS_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def koraidon_deck() -> list[CardDef]:
+    return _deck([
+        (KORAIDON_EX, 4), (RIOLU, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (FIGHTING_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def dialga_deck() -> list[CardDef]:
+    return _deck([
+        (DIALGA_EX, 4), (KLEFKI, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (METAL_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def palkia_deck() -> list[CardDef]:
+    return _deck([
+        (PALKIA_EX, 4), (WIGLETT, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (WATER_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def zeraora_deck() -> list[CardDef]:
+    return _deck([
+        (ZERAORA_EX, 4), (WATTREL, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (LIGHTNING_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def hooh_deck() -> list[CardDef]:
+    return _deck([
+        (HO_OH_EX, 4), (FUECOCO, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (FIRE_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def entei_deck() -> list[CardDef]:
+    return _deck([
+        (ENTEI_EX, 4), (FUECOCO, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (FIRE_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def pecharunt_deck() -> list[CardDef]:
+    return _deck([
+        (PECHARUNT_EX, 4), (NATU, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (PSYCHIC_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def suicune_deck() -> list[CardDef]:
+    return _deck([
+        (SUICUNE_EX, 4), (WIGLETT, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (WATER_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def genesect_deck() -> list[CardDef]:
+    return _deck([
+        (GENESECT_EX, 4), (KLEFKI, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (METAL_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def lugia_deck() -> list[CardDef]:
+    return _deck([
+        (LUGIA_EX, 4), (BIDOOF, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (WATER_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def tapu_koko_deck() -> list[CardDef]:
+    # Single-prize: no rule-box attackers, so the opponent must take six KOs.
+    return _deck([
+        (TAPU_KOKO, 4), (WATTREL, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (LIGHTNING_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def flutter_mane_deck() -> list[CardDef]:
+    return _deck([
+        (FLUTTER_MANE_EX, 4), (NATU, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (PSYCHIC_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def raging_bolt_deck() -> list[CardDef]:
+    return _deck([
+        (RAGING_BOLT_EX, 4), (WATTREL, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (LIGHTNING_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def gholdengo_deck() -> list[CardDef]:
+    return _deck([
+        (GHOLDENGO_EX, 4), (KLEFKI, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (METAL_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def terapagos_deck() -> list[CardDef]:
+    return _deck([
+        (TERAPAGOS_EX, 4), (BIDOOF, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (WATER_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
 DECKS = {
     "charizard_ex": charizard_deck,
     "gardevoir_ex": gardevoir_deck,
@@ -370,4 +763,151 @@ DECKS = {
     "roaring_moon_ex": roaring_moon_deck,
     "chien_pao_ex": chien_pao_deck,
     "iron_valiant_ex": iron_valiant_deck,
+    "ogerpon_ex": ogerpon_deck,
+    "koraidon_ex": koraidon_deck,
+    "dialga_ex": dialga_deck,
+    "palkia_ex": palkia_deck,
+    "zeraora_ex": zeraora_deck,
+    "hooh_ex": hooh_deck,
+    "entei_ex": entei_deck,
+    "pecharunt_ex": pecharunt_deck,
+    "suicune_ex": suicune_deck,
+    "genesect_ex": genesect_deck,
+    "lugia_ex": lugia_deck,
+    "tapu_koko": tapu_koko_deck,
+    "flutter_mane_ex": flutter_mane_deck,
+    "raging_bolt_ex": raging_bolt_deck,
+    "gholdengo_ex": gholdengo_deck,
+    "terapagos_ex": terapagos_deck,
 }
+
+
+# --------------------------------------------------------------------------- #
+# Set (expansion) names — derived for built-in cards from the id prefix.
+# --------------------------------------------------------------------------- #
+SETS = {
+    "sv1": "Scarlet & Violet Base",
+    "sv2": "Paldea Evolved",
+    "sv3": "Obsidian Flames",
+    "sv4": "Paradox Rift",
+    "sv5": "Temporal Forces",
+    "sv6": "Twilight Masquerade",
+    "sv7": "Stellar Crown",
+    "sv8": "Surging Sparks",
+    "sv9": "Journey Together",
+    "sv10": "Destined Rivals",
+    "sv11": "Prismatic Evolutions",
+    "sv12": "Twilight Embers",
+}
+
+
+def set_name(card_id: str) -> str:
+    code = (card_id or "").split("-")[0]
+    return SETS.get(code, "")
+
+
+def builtin_sets() -> list[dict]:
+    """Built-in expansions actually represented in the card pool, with counts."""
+    counts: dict[str, int] = {}
+    for cd in CATALOG.values():
+        code = cd.id.split("-")[0]
+        if code in SETS:
+            counts[code] = counts.get(code, 0) + 1
+    return [{"code": c, "name": SETS[c], "cards": counts[c]}
+            for c in SETS if c in counts]
+
+
+# --------------------------------------------------------------------------- #
+# Deck strategy metadata (archetype, type, game plan, key cards).
+# --------------------------------------------------------------------------- #
+DECK_META = {
+    "charizard_ex": {"type": "Fire", "archetype": "Evolution midrange",
+        "strategy": "Build Charizard ex behind Pidgeot ex card draw; trade big two-prize attackers and close with energy-accelerated swings.",
+        "key_cards": ["Charizard ex", "Pidgeot ex"]},
+    "gardevoir_ex": {"type": "Psychic", "archetype": "Evolution midrange",
+        "strategy": "Stream attackers with Psychic energy acceleration off the Kirlia/Gardevoir line; grind value and out-resource the opponent.",
+        "key_cards": ["Gardevoir ex", "Kirlia"]},
+    "miraidon_ex": {"type": "Lightning", "archetype": "All-Basic aggro",
+        "strategy": "Explosive turn-one setup; accelerate Lightning energy and apply immediate pressure before the opponent stabilises.",
+        "key_cards": ["Miraidon ex", "Iron Hands ex"]},
+    "roaring_moon_ex": {"type": "Darkness", "archetype": "All-Basic aggro",
+        "strategy": "Hit hard and early with Darkness attackers; use Boss's Orders to target the right Pokémon for prizes.",
+        "key_cards": ["Roaring Moon ex", "Darkrai ex"]},
+    "chien_pao_ex": {"type": "Water", "archetype": "Energy-acceleration combo",
+        "strategy": "Flood the board with Water energy from the discard and swing for huge one-shot numbers.",
+        "key_cards": ["Chien-Pao ex"]},
+    "iron_valiant_ex": {"type": "Psychic", "archetype": "Aggro tempo",
+        "strategy": "Cheap early attacks then a big finisher; punish slow openings with fast Psychic pressure.",
+        "key_cards": ["Iron Valiant ex"]},
+    "ogerpon_ex": {"type": "Grass", "archetype": "Aggro tempo",
+        "strategy": "Low-cost Grass beats and a heavy follow-up; keep tempo against slower evolution decks.",
+        "key_cards": ["Ogerpon ex"]},
+    "koraidon_ex": {"type": "Fighting", "archetype": "Energy-acceleration aggro",
+        "strategy": "Accelerate Fighting energy with Dino Cry and hit 220 quickly; race the opponent down.",
+        "key_cards": ["Koraidon ex"]},
+    "dialga_ex": {"type": "Metal", "archetype": "Scaling midrange",
+        "strategy": "Stack Metal energy so Metal Blast scales, then clean up with a big Cosmic Crush.",
+        "key_cards": ["Dialga ex"]},
+    "palkia_ex": {"type": "Water", "archetype": "Scaling midrange",
+        "strategy": "Grow Subspace Swell with extra Water energy and pivot into a heavy Spatial Rend.",
+        "key_cards": ["Palkia ex"]},
+    "zeraora_ex": {"type": "Lightning", "archetype": "Bench spread",
+        "strategy": "Free retreat for mobility while Plasma Fists chips the whole bench to set up multi-prize turns.",
+        "key_cards": ["Zeraora ex"]},
+    "hooh_ex": {"type": "Fire", "archetype": "All-Basic aggro",
+        "strategy": "Straightforward Fire beatdown with a high-damage finisher.",
+        "key_cards": ["Ho-Oh ex"]},
+    "entei_ex": {"type": "Fire", "archetype": "Status — Burn",
+        "strategy": "Apply Burn for chip damage at every Checkup, then finish with Flare Blitz; pressure plus passive damage.",
+        "key_cards": ["Entei ex"]},
+    "pecharunt_ex": {"type": "Psychic", "archetype": "Status — disruption",
+        "strategy": "Lock the Active with Poison and Sleep so it can't attack or retreat freely, then grind prizes.",
+        "key_cards": ["Pecharunt ex"]},
+    "suicune_ex": {"type": "Water", "archetype": "Healing control",
+        "strategy": "Out-sustain aggro: heal with Aurora Gain and Potion so attackers never quite get the KO.",
+        "key_cards": ["Suicune ex"]},
+    "genesect_ex": {"type": "Metal", "archetype": "Bench spread",
+        "strategy": "Spread damage with Techno Barrage to enable multi-prize Boss's Orders turns.",
+        "key_cards": ["Genesect ex"]},
+    "lugia_ex": {"type": "Colorless", "archetype": "Colorless toolbox",
+        "strategy": "Colorless costs run on any energy, so the deck is consistent and flexible; close with Tempest Dive.",
+        "key_cards": ["Lugia ex"]},
+    "tapu_koko": {"type": "Lightning", "archetype": "Single-prize tempo",
+        "strategy": "Give up only one prize per KO while spreading with Thunderbolt Dance — win the prize trade against two-prize ex decks.",
+        "key_cards": ["Tapu Koko"]},
+    "flutter_mane_ex": {"type": "Psychic", "archetype": "Aggro + gust",
+        "strategy": "Cheap Psychic pressure with a built-in Boss's Orders effect — drag up the Pokémon you want to KO and take prizes on your terms.",
+        "key_cards": ["Flutter Mane ex"]},
+    "raging_bolt_ex": {"type": "Lightning", "archetype": "Scaling combo",
+        "strategy": "Load extra energy so Bellowing Thunder scales, then erase a key threat with one big hit.",
+        "key_cards": ["Raging Bolt ex"]},
+    "gholdengo_ex": {"type": "Metal", "archetype": "Draw-engine aggro",
+        "strategy": "Coin Bonus refills your hand while it attacks; keep the gas flowing and close with Make It Rain.",
+        "key_cards": ["Gholdengo ex"]},
+    "terapagos_ex": {"type": "Colorless", "archetype": "Tanky control",
+        "strategy": "A high-HP Colorless wall that heals as it attacks (Crystal Guard) and runs on any energy — grind the opponent out.",
+        "key_cards": ["Terapagos ex"]},
+}
+
+
+# Representative image per deck (its ace card's art); the UI falls back if the
+# external image URL 404s, just like individual cards.
+def deck_image(deck_id: str) -> str:
+    meta = DECK_META.get(deck_id) or {}
+    if not meta.get("key_cards"):
+        return ""
+    ace = meta["key_cards"][0]
+    for cd in CATALOG.values():
+        if cd.name == ace:
+            return cd.image or ""
+    return ""
+
+
+def deck_catalog() -> list[dict]:
+    out = []
+    for did in DECKS:
+        m = DECK_META.get(did, {})
+        out.append({"id": did, "type": m.get("type"),
+                    "archetype": m.get("archetype"), "strategy": m.get("strategy", ""),
+                    "key_cards": m.get("key_cards", []), "image": deck_image(did)})
+    return out
