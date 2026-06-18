@@ -29,6 +29,24 @@ async function req(path, { method = 'GET', body, auth = false } = {}) {
 
 export const api = {
   base: BASE,
+  // --- multiplayer (2-human) ---
+  mpCreate: (body) => req('/api/multiplayer/create', { method: 'POST', body }),
+  mpJoin: (mid, name) => req(`/api/multiplayer/${mid}/join`, { method: 'POST', body: { name } }),
+  mpState: (mid, token) => req(`/api/multiplayer/${mid}/state?token=${encodeURIComponent(token || '')}`),
+  mpAction: (mid, token, index) =>
+    req(`/api/multiplayer/${mid}/action?token=${encodeURIComponent(token || '')}`, { method: 'POST', body: { index } }),
+  mpOpen: () => req('/api/multiplayer/open'),
+  mpLearned: () => req('/api/multiplayer/learned'),
+  mpLearn: (epochs) => req('/api/multiplayer/learn', { method: 'POST', body: { epochs } }),
+  mpLearnStatus: (jobId) => req(`/api/multiplayer/learn/${jobId}`),
+  mpDatasetUrl: () => `${BASE}/api/multiplayer/dataset`,
+  mpRematch: (mid, token, swap = false) =>
+    req(`/api/multiplayer/${mid}/rematch?token=${encodeURIComponent(token || '')}&swap=${swap ? 'true' : 'false'}`, { method: 'POST' }),
+  // --- favorites (per-user) ---
+  favorites: () => req('/api/favorites', { auth: true }),
+  addFavorite: (kind, ref_id) => req('/api/favorites', { method: 'POST', body: { kind, ref_id }, auth: true }),
+  removeFavorite: (kind, ref_id) => req(`/api/favorites/${kind}/${encodeURIComponent(ref_id)}`, { method: 'DELETE', auth: true }),
+  base: BASE,
   health: () => req('/api/health'),
   decks: () => req('/api/decks'),
   agents: () => req('/api/agents'),

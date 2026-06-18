@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import { Star } from '../favorites';
 
 const TYPE_COLOR = {
   Fire: 'var(--fire)', Water: 'var(--water)', Grass: 'var(--grass)',
@@ -30,7 +31,8 @@ export default function Decks() {
           <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
             {sets.map((s) => (
               <span key={s.code} className="set-chip">
-                <b>{s.name}</b><span className="mono"> · {s.code} · {s.cards} cards</span>
+                <Star kind="set" id={s.code} />
+                <b style={{ marginLeft: 6 }}>{s.name}</b><span className="mono"> · {s.code} · {s.cards} cards</span>
               </span>
             ))}
           </div>
@@ -46,7 +48,10 @@ export default function Decks() {
                   onError={(e) => { e.currentTarget.style.display = 'none'; }} />
               )}
               <div style={{ flex: 1 }}>
-                <div className="deck-name">{d.id.replace(/_/g, ' ')}</div>
+                <div className="row between">
+                  <div className="deck-name">{d.id.replace(/_/g, ' ')}</div>
+                  <Star kind="deck" id={d.id} />
+                </div>
                 <div className="row" style={{ gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
                   {d.type && <span className="type-tag" style={{ '--tc': TYPE_COLOR[d.type] || 'var(--muted)' }}>{d.type}</span>}
                   <span className="tag">{d.archetype}</span>

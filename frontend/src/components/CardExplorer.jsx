@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import ImageDisclaimer from './ImageDisclaimer';
+import { Star, rememberCard } from '../favorites';
 
 function CardTile({ card, onChanged }) {
   const [src, setSrc] = useState(card.image || '');
@@ -11,6 +12,9 @@ function CardTile({ card, onChanged }) {
   const [err, setErr] = useState('');
   const overridden = card.image_overridden;
   const missing = !src || broken;
+
+  // remember name/image so the Favorites tab can render this card by id later
+  useEffect(() => { if (card.id) rememberCard(card); }, [card.id]);
 
   async function save() {
     setErr('');
@@ -39,6 +43,7 @@ function CardTile({ card, onChanged }) {
             </div>}
         <button className="img-edit" title="Edit image link" onClick={() => { setEditing(!editing); setVal(src); }}>✎</button>
         {overridden && <span className="img-flag" title="Custom image">custom</span>}
+        {card.id && <span className="card-star"><Star kind="card" id={card.id} /></span>}
       </div>
       <div className="meta">
         <div className="nm">{card.name}</div>

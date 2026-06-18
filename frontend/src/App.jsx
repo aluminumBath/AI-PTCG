@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from './api';
 import { AuthProvider, useAuth } from './auth';
+import BootGate from './components/BootGate';
 import Login from './components/Login';
 import WatchMode from './components/WatchMode';
 import PlayMode from './components/PlayMode';
@@ -13,17 +14,22 @@ import Competition from './components/Competition';
 import Submissions from './components/Submissions';
 import Scoreboard from './components/Scoreboard';
 import Decks from './components/Decks';
+import Multiplayer from './components/Multiplayer';
+import Favorites from './components/Favorites';
 import AdminPanel from './components/AdminPanel';
+import { loadFavorites } from './favorites';
 
 const NAV = [
   { id: 'watch', label: 'Watch AI vs AI', group: 'Arena' },
   { id: 'play', label: 'Play vs AI', group: 'Arena' },
+  { id: 'multiplayer', label: '2-player', group: 'Arena' },
   { id: 'import', label: 'Deck import', group: 'Build' },
   { id: 'arena', label: 'Model arena', group: 'Intelligence' },
   { id: 'submissions', label: 'Ladder', group: 'Intelligence' },
   { id: 'scores', label: 'Model scores', group: 'Intelligence' },
   { id: 'train', label: 'Training lab', group: 'Intelligence' },
   { id: 'competition', label: 'Competition', group: 'Intelligence' },
+  { id: 'favorites', label: 'Favorites', group: 'You' },
   { id: 'decks', label: 'Decks', group: 'Reference' },
   { id: 'cards', label: 'Card explorer', group: 'Reference' },
   { id: 'rules', label: 'Rules feed', group: 'Reference' },
@@ -34,12 +40,19 @@ function Shell() {
   const [tab, setTab] = useState('watch');
   const [decks, setDecks] = useState([]);
   const [models, setModels] = useState([]);
+  const [launch, setLaunch] = useState(null);   // { mode, deck } from Favorites quick-launch
 
   const loadDecks = () => api.decks()
     .then((r) => setDecks(r.decks))
     .catch(() => setDecks(['charizard_ex', 'gardevoir_ex', 'miraidon_ex', 'roaring_moon_ex']));
   useEffect(() => { loadDecks(); }, []);
   useEffect(() => { api.agents().then((r) => setModels(r.models || [])).catch(() => setModels([])); }, []);
+  useEffect(() => { if (user) loadFavorites(); }, [user]);
+
+  function launchDeck(mode, deck) {
+    setLaunch({ mode, deck, at: Date.now() });
+    setTab(mode === 'watch' ? 'watch' : 'play');
+  }
 
   if (!ready) return <div className="auth-wrap"><span className="spin" /></div>;
   if (!user) return <Login />;
@@ -87,14 +100,16 @@ function Shell() {
       </aside>
 
       <main className="main">
-        {tab === 'watch' && <WatchMode decks={decks} agents={models} />}
-        {tab === 'play' && <PlayMode decks={decks} agents={models} />}
+        {tab === 'watch' && <WatchMode decks={decks} agents={models} initialDeck={launch?.mode === 'watch' ? launch.deck : null} launchKey={launch?.at} />}
+        {tab === 'play' && <PlayMode decks={decks} agents={models} initialDeck={launch?.mode === 'play' ? launch.deck : null} launchKey={launch?.at} />}
+        {tab === 'multiplayer' && <Multiplayer />}
         {tab === 'import' && <DeckImport onImported={() => { loadDecks(); }} />}
         {tab === 'arena' && <ModelArena models={models} decks={decks} />}
         {tab === 'submissions' && <Submissions />}
         {tab === 'scores' && <Scoreboard />}
         {tab === 'train' && <TrainingDashboard />}
         {tab === 'competition' && <Competition />}
+        {tab === 'favorites' && <Favorites onLaunch={launchDeck} />}
         {tab === 'decks' && <Decks />}
         {tab === 'cards' && <CardExplorer />}
         {tab === 'rules' && <RulesFeed />}
@@ -106,8 +121,10 @@ function Shell() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Shell />
-    </AuthProvider>
+    <BootGate>
+      <AuthProvider>
+        <Shell />
+      </AuthProvider>
+    </BootGate>
   );
 }

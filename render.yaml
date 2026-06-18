@@ -15,6 +15,10 @@ services:
     plan: free
     healthCheckPath: /api/health
     autoDeploy: true
+    # Apply database migrations before the new version goes live. Safe on a
+    # fresh database (creates everything) or an existing one (adds only the new
+    # tables); see backend/alembic/versions/0001_baseline.py.
+    preDeployCommand: alembic upgrade head
     envVars:
       # Neon connection string, e.g.
       # postgresql://USER:PASSWORD@ep-xxx.us-east-2.aws.neon.tech/tcg?sslmode=require

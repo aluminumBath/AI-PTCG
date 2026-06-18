@@ -33,6 +33,10 @@ New Decks Are Available
     Should Contain    ${decks.json()}[decks]    tapu_koko
     Should Contain    ${decks.json()}[decks]    flutter_mane_ex
     Should Contain    ${decks.json()}[decks]    terapagos_ex
+    Should Contain    ${decks.json()}[decks]    dragapult_ex
+    Should Contain    ${decks.json()}[decks]    eternatus_ex
+    Should Contain    ${decks.json()}[decks]    gouging_fire_ex
+    Should Contain    ${decks.json()}[decks]    iron_thorns_ex
 
 Decks Carry Strategy Metadata And Images
     ${decks}=    GET On Session    tcg    /api/decks
@@ -47,7 +51,7 @@ Decks Carry Strategy Metadata And Images
 Built-In Sets Are Listed
     ${r}=    GET On Session    tcg    /api/sets
     ${n}=    Get Length    ${r.json()}[sets]
-    Should Be True    ${n} >= 12
+    Should Be True    ${n} >= 13
     ${names}=    Evaluate    " ".join(s['name'] for s in $r.json()['sets'])
     Should Contain    ${names}    Obsidian Flames
 
@@ -57,6 +61,8 @@ New Strategy Decks Are Playable
     lugia_ex          tapu_koko
     flutter_mane_ex   gholdengo_ex
     raging_bolt_ex    terapagos_ex
+    dragapult_ex      eternatus_ex
+    gouging_fire_ex   iron_thorns_ex
 
 
 *** Keywords ***

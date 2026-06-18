@@ -2,11 +2,24 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import Board from './Board';
 import ImageDisclaimer from './ImageDisclaimer';
+import { useFavorites } from '../favorites';
 
-export default function PlayMode({ decks, agents }) {
+function orderByFav(decks, favDecks) {
+  const fav = favDecks || [];
+  return [...decks].sort((a, b) => (fav.includes(b) ? 1 : 0) - (fav.includes(a) ? 1 : 0));
+}
+const deckLabel = (d, favDecks) => ((favDecks || []).includes(d) ? `★ ${d}` : d);
+
+export default function PlayMode({ decks, agents, initialDeck, launchKey }) {
   const AGENTS = agents && agents.length ? agents
     : [{ id: 'heuristic', label: 'Heuristic' }, { id: 'mcts', label: 'MCTS' }];
+  const { favs } = useFavorites();
   const [cfg, setCfg] = useState({ deck_a: 'charizard_ex', deck_b: 'gardevoir_ex', agent_b: 'mcts' });
+
+  // jump straight to a favorited deck when launched from the Favorites tab
+  useEffect(() => {
+    if (initialDeck) setCfg((c) => ({ ...c, deck_a: initialDeck }));
+  }, [initialDeck, launchKey]);
   const [game, setGame] = useState(null);
   const [state, setState] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -49,12 +62,12 @@ export default function PlayMode({ decks, agents }) {
         <div className="row">
           <label className="field">Your deck
             <select value={cfg.deck_a} onChange={(e) => setCfg({ ...cfg, deck_a: e.target.value })}>
-              {decks.map((d) => <option key={d} value={d}>{d}</option>)}
+              {orderByFav(decks, favs.decks).map((d) => <option key={d} value={d}>{deckLabel(d, favs.decks)}</option>)}
             </select>
           </label>
           <label className="field">Opponent deck
             <select value={cfg.deck_b} onChange={(e) => setCfg({ ...cfg, deck_b: e.target.value })}>
-              {decks.map((d) => <option key={d} value={d}>{d}</option>)}
+              {orderByFav(decks, favs.decks).map((d) => <option key={d} value={d}>{deckLabel(d, favs.decks)}</option>)}
             </select>
           </label>
           <label className="field">Opponent brain

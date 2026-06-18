@@ -52,6 +52,9 @@ def train(
     opponent: str = "heuristic",
     selfplay_every: int = 25,
     seed: int = 0,
+    imitation: str | None = None,
+    imitation_epochs: int = 5,
+    imitation_lr: float = 1e-3,
 ):
     import torch
     import torch.nn.functional as F
@@ -66,6 +69,25 @@ def train(
     if os.path.exists(LATEST):
         net.load_state_dict(torch.load(LATEST, map_location="cpu")["model"])
         print("Resumed from checkpoint.")
+
+    # Optional behavioural-cloning warm-start from captured human games: pull the
+    # policy toward the moves humans made in games they won, before PPO refines it.
+    if imitation:
+        from .imitation import load_dataset, behavioral_clone
+        samples = [s for s in load_dataset(imitation) if len(s.get("action_feats", [])) >= 2]
+        if len(samples) < 10:
+            print(f"[imitation] only {len(samples)} usable samples in {imitation}; skipping warm-start.")
+        else:
+            print(f"[imitation] behavioural cloning on {len(samples)} human moves "
+                  f"for {imitation_epochs} epochs…")
+            hist = behavioral_clone(net, samples, epochs=imitation_epochs, lr=imitation_lr,
+                                    log=lambda r: print(f"  [imitation] epoch {r['epoch']} "
+                                                        f"loss {r['loss']} acc {r['accuracy']}"))
+            os.makedirs(os.path.dirname(LATEST) or ".", exist_ok=True)
+            torch.save({"model": net.state_dict()}, LATEST)  # so PPO + agents start from it
+            print(f"[imitation] warm-start done (final acc "
+                  f"{hist[-1]['accuracy'] if hist else 'n/a'}); checkpoint saved.")
+
     opt = torch.optim.Adam(net.parameters(), lr=lr)
 
     env = SelfPlayEnv(opponent_policy=_make_opponent(opponent, LATEST))
@@ -203,6 +225,11 @@ def main():
     ap.add_argument("--opponent", choices=["random", "heuristic", "self"], default="heuristic")
     ap.add_argument("--selfplay-every", type=int, default=25)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--imitation", type=str, default=None,
+                    help="path to a human-games JSONL to behaviourally-clone before PPO "
+                         "(e.g. backend/data_store/human_games.jsonl)")
+    ap.add_argument("--imitation-epochs", type=int, default=5)
+    ap.add_argument("--imitation-lr", type=float, default=1e-3)
     args = ap.parse_args()
     train(
         updates=args.updates,
@@ -211,6 +238,9 @@ def main():
         opponent=args.opponent,
         selfplay_every=args.selfplay_every,
         seed=args.seed,
+        imitation=args.imitation,
+        imitation_epochs=args.imitation_epochs,
+        imitation_lr=args.imitation_lr,
     )
 
 

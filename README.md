@@ -26,8 +26,18 @@ rules-faithful environment — plus a polished web app to **watch** agents duel,
   boundary while keeping the partial results.
 - **RL self-play** — a PPO trainer with league-style self-play, checkpoints, and
   a live metrics feed for the dashboard.
+- **Two-player multiplayer** — two humans play on the same authoritative engine
+  with hands masked per seat, in either **timed-turn** mode (a per-turn clock; if
+  it lapses the server auto-finishes the turn so play never stalls) or
+  **send-move-&-wait** correspondence mode. **Every finished match captures the
+  *winner's* moves** and can behaviourally-clone them into the RL policy, so the
+  `rl` / `rl_mcts` agents learn the strategies that win (see below).
 - **Deck import** — paste a Pokémon TCG Live decklist; it's validated against the
   implemented card pool and becomes selectable in any game.
+- **Favorites** — star decks, cards, and sets (the ☆ on any deck/card/set, or the
+  **Favorites** tab). Favorited decks are pinned to the top of every deck picker
+  (Watch, Play, and multiplayer) and can jump straight into battle from the
+  Favorites tab, so your kit is always ready.
 - **Full-stack app** — FastAPI backend + React/Vite frontend, Postgres-backed
   accounts (login, history, admin), Dockerized locally and deployable to Render
   with a Neon database.
@@ -35,16 +45,16 @@ rules-faithful environment — plus a polished web app to **watch** agents duel,
 > **Honest scope.** The official API (pokemontcg.io) provides card *data* —
 > names, text, images, set legality — but **not executable rules**. Each card's
 > behaviour is hand-authored in `backend/engine/effects.py`. The engine ships
-> with **twenty-two** faithful, rules-legal Standard archetypes spanning every
+> with **twenty-six** faithful, rules-legal Standard archetypes spanning every
 > energy type **and a range of strategies** — evolution midrange, all-Basic
 > aggro, energy-acceleration combo, scaling midrange, bench spread, status
-> disruption (Burn, Poison/Sleep), healing control, a Colorless toolbox, a
-> single-prize prize-trade deck, plus draw-engine and tanky-control aces —
-> drawn from twelve expansions and each validated as exactly 60 cards under the
-> 4-copy rule. The **Decks** tab documents every deck's game plan, key cards and
-> ace-card art (`GET /api/decks` · `GET /api/sets`), and the Model arena has a
-> 🎲 **Randomize** button to pick a random deck slate for a tournament. Add a
-> card, implement its effect, drop it in a deck to extend.
+> disruption (Burn, Poison/Sleep, Paralysis lock), healing control, a Colorless
+> toolbox, a single-prize prize-trade deck, plus draw-engine and tanky-control
+> aces — drawn from thirteen expansions and each validated as exactly 60 cards
+> under the 4-copy rule. The **Decks** tab documents every deck's game plan, key
+> cards and ace-card art (`GET /api/decks` · `GET /api/sets`), and the Model
+> arena has a 🎲 **Randomize** button to pick a random deck slate for a
+> tournament. Add a card, implement its effect, drop it in a deck to extend.
 
 > **Rules & attribution.** The engine enforces the official rules (turn
 > structure, the first-player turn-1 restrictions, the Pokémon Checkup for
@@ -144,6 +154,8 @@ cd backend
 # warm up against the heuristic, then graduate to self-play
 python -m rl.train --updates 300 --episodes-per-update 16 --opponent heuristic
 python -m rl.train --updates 800 --episodes-per-update 24 --opponent self
+# warm-start from captured human games (behavioural cloning) before PPO refines it
+python -m rl.train --updates 400 --opponent self --imitation data_store/human_games.jsonl
 ```
 
 | flag                   | meaning                                              |
@@ -153,6 +165,16 @@ python -m rl.train --updates 800 --episodes-per-update 24 --opponent self
 | `--opponent`           | `random` \| `heuristic` \| `self` (league self-play) |
 | `--selfplay-every`     | snapshot learner as opponent every N updates         |
 | `--lr`, `--seed`       | learning rate / RNG seed                             |
+| `--imitation`          | JSONL of human games to behaviourally-clone first    |
+| `--imitation-epochs`   | BC epochs for the warm-start (default 5)             |
+
+The `--imitation` flag behaviourally-clones the captured human-winner moves
+(the same dataset the in-app **Teach the agents** button uses, exported from
+the multiplayer **Learn from the winners** panel) into the policy **before** PPO
+starts, so self-play refines a policy that already plays human-like winning
+lines. It's skipped automatically if the dataset has fewer than 10 usable
+decisions.
+
 
 **Expectations (honest):** on CPU this is slow but real. The policy starts
 below random, passes random within tens of updates, and reaches parity with the
@@ -201,7 +223,32 @@ On first boot the backend creates its tables in Neon and seeds the admin user.
 
 > **Free-tier note.** Render free web services sleep when idle and have no GPU,
 > so they're for serving (watch/play) and the dashboard — not training. The
-> committed checkpoint is what gets served.
+> committed checkpoint is what gets served. When the backend is asleep, the
+> frontend shows a friendly "waking the server…" screen (polling `/api/health`)
+> and loads the app automatically once it's up — so the cold start (≈30–60s)
+> doesn't look like a hang.
+
+### Database migrations (Alembic)
+
+Schema is managed by [Alembic](https://alembic.sqlalchemy.org/). The Render
+blueprint runs `alembic upgrade head` as a **`preDeployCommand`** before each
+backend release, so a deployed database automatically picks up new tables (and
+future column changes) without manual steps. The baseline revision is idempotent
+— it creates the full schema on a fresh database and adds only the missing tables
+(e.g. `favorites`, `matches`, `human_games`) on an established one, leaving
+existing data untouched.
+
+Run it yourself against any `DATABASE_URL`:
+
+```bash
+cd backend
+export DATABASE_URL="postgresql://USER:PASS@HOST/DB?sslmode=require"
+alembic upgrade head                 # apply migrations
+alembic revision --autogenerate -m "add X"   # create the next migration after a model change
+```
+
+The app also calls `create_all` on startup as a dev convenience, so local SQLite
+runs work without invoking Alembic; production relies on the migration step.
 
 ---
 
@@ -265,7 +312,60 @@ agent seam.
 
 ---
 
-## PTCG AI Battle Challenge (Kaggle)
+## Two-player multiplayer & learning from the winner
+
+The **2-player** tab (under *Arena*) hosts a game between two humans on a single
+server-authoritative `GameEngine`. One player **hosts** (picks both decks and the
+turn style) and shares the match code; the other **joins** with it. Each player
+only ever sees their own hand — the opponent's hand serialises as face-down
+placeholders (`state.to_dict(viewer=seat)`), and moves are submitted as an
+**index into your own legal-action list**, validated server-side (wrong seat →
+`403`, illegal index → `400`).
+
+Two turn styles:
+
+- **Timed** — each turn has a clock; if it lapses, the server auto-finishes that
+  player's turn with the heuristic so the game never stalls, then re-arms the
+  clock for the next turn.
+- **Send move & wait** — correspondence play with no clock; each side polls for
+  the opponent's move.
+
+**Learning the winner's strategy.** The RL policy is a *pointer* network — a
+softmax over the features of each currently-legal action — so a human decision is
+captured as exactly the tuple behavioural cloning needs: `(state encoding,
+features of every legal action, the index the player chose)`. Every move of a
+match is recorded with its player; when the game ends, the **winner's** samples
+are appended to `backend/data_store/human_games.jsonl` and a `HumanGame` row is
+written. The **Learn from the winners** panel then lets you:
+
+- see how many games / winning moves are captured and **what winners did most**
+  (the action-type mix, decoded from the stored samples);
+- **Teach the agents** (`POST /api/multiplayer/learn`) — a background job that
+  behaviourally-clones those winning moves into the policy checkpoint the `rl`
+  and `rl_mcts` agents load, so they immediately start playing the strategies
+  that won here (gated at a minimum sample count so a single game can't wreck the
+  net);
+- **Export** the raw dataset (`GET /api/multiplayer/dataset`) to feed the trainer
+  offline.
+
+Endpoints: `POST /api/multiplayer/create` · `POST /api/multiplayer/{id}/join` ·
+`GET /api/multiplayer/{id}/state?token=` · `POST /api/multiplayer/{id}/action?token=`
+· `GET /api/multiplayer/open` · `GET /api/multiplayer/learned` ·
+`POST /api/multiplayer/learn` · `GET /api/multiplayer/dataset`.
+
+**Durability & lobby.** Matches are **Postgres-durable**: rather than serialising
+a live engine, each match stores its seed, the two deck ids, and the sequence of
+action indices, and is reconstructed by deterministic replay — so games survive a
+backend restart (in-progress matches are rehydrated on boot, and any match is
+lazily rebuilt from the store on access). The lobby (`GET /api/multiplayer/open`,
+shown in the **2-player** tab) lists games waiting for an opponent with one-click
+join, and is itself backed by the store so it stays accurate across restarts.
+When a game ends, a **Rematch (same decks)** button
+(`POST /api/multiplayer/{id}/rematch?token=…[&swap=true]`) re-hosts a fresh match
+with the same decks, mode, and clock — the requester becomes the host and the new
+game shows up in the lobby for the opponent to join.
+
+
 
 This project targets The Pokémon Company's **Pokémon TCG AI Battle Challenge**,
 which has two linked Kaggle categories:

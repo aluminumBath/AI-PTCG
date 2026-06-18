@@ -535,6 +535,52 @@ TERAPAGOS_EX = _reg(CardDef(
 ))
 
 
+# --------------------------------------------------------------------------- #
+# Decks 23-26 — more aces (sv12 / sv13)
+# --------------------------------------------------------------------------- #
+DRAGAPULT_EX = _reg(CardDef(
+    id="sv13-130", name="Dragapult ex", category=CardCategory.POKEMON,
+    hp=200, types=(E.PSYCHIC,), stage=Stage.BASIC,
+    weakness=E.DARKNESS, retreat_cost=1, rule_box="ex",
+    attacks=(Attack(name="Jet Headbutt", cost=(E.PSYCHIC,), damage=70),
+             Attack(name="Phantom Dive", cost=(E.PSYCHIC, E.PSYCHIC), damage=120,
+                    effect_id="bench_damage_2_all_opp",
+                    text="120 damage and 20 to each of the opponent's Benched Pokémon."),),
+))
+MURKROW = _reg(CardDef(
+    id="sv13-88", name="Murkrow", category=CardCategory.POKEMON,
+    hp=70, types=(E.DARKNESS,), stage=Stage.BASIC,
+    weakness=E.LIGHTNING, retreat_cost=1,
+    attacks=(Attack(name="Peck", cost=(E.DARKNESS,), damage=20),),
+))
+ETERNATUS_EX = _reg(CardDef(
+    id="sv13-110", name="Eternatus ex", category=CardCategory.POKEMON,
+    hp=220, types=(E.DARKNESS,), stage=Stage.BASIC,
+    weakness=E.GRASS, retreat_cost=2, rule_box="ex",
+    attacks=(Attack(name="Dread End", cost=(E.DARKNESS, E.COLORLESS), damage=70),
+             Attack(name="Eternal Beam", cost=(E.DARKNESS, E.DARKNESS, E.COLORLESS),
+                    damage=160, effect_id="discard_energy_self_2",
+                    text="160 damage. Discard 2 Energy from this Pokémon."),),
+))
+GOUGING_FIRE_EX = _reg(CardDef(
+    id="sv12-38", name="Gouging Fire ex", category=CardCategory.POKEMON,
+    hp=220, types=(E.FIRE,), stage=Stage.BASIC,
+    weakness=E.WATER, retreat_cost=2, rule_box="ex",
+    attacks=(Attack(name="Blaze Blitz", cost=(E.FIRE, E.FIRE, E.COLORLESS),
+                    damage=80, effect_id="damage_scales_with_energy_30",
+                    text="80 + 30 for each extra Energy on this Pokémon."),),
+))
+IRON_THORNS_EX = _reg(CardDef(
+    id="sv12-77", name="Iron Thorns ex", category=CardCategory.POKEMON,
+    hp=220, types=(E.LIGHTNING,), stage=Stage.BASIC,
+    weakness=E.FIGHTING, retreat_cost=3, rule_box="ex",
+    attacks=(Attack(name="Pinpoint Beam", cost=(E.LIGHTNING, E.COLORLESS), damage=60),
+             Attack(name="Surging Bolt", cost=(E.LIGHTNING, E.LIGHTNING, E.COLORLESS),
+                    damage=120, effect_id="paralyze_target",
+                    text="120 damage. The opponent's Active is now Paralyzed."),),
+))
+
+
 def _deck(spec: list[tuple[CardDef, int]]) -> list[CardDef]:
     """Build a deck, enforcing the official deck-construction rules:
     exactly 60 cards, and at most 4 copies of any card *except* Basic Energy
@@ -756,6 +802,42 @@ def terapagos_deck() -> list[CardDef]:
     ])
 
 
+def dragapult_deck() -> list[CardDef]:
+    return _deck([
+        (DRAGAPULT_EX, 4), (NATU, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (PSYCHIC_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def eternatus_deck() -> list[CardDef]:
+    return _deck([
+        (ETERNATUS_EX, 4), (MURKROW, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (DARKNESS_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def gouging_fire_deck() -> list[CardDef]:
+    return _deck([
+        (GOUGING_FIRE_EX, 4), (FUECOCO, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (FIRE_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
+def iron_thorns_deck() -> list[CardDef]:
+    return _deck([
+        (IRON_THORNS_EX, 4), (WATTREL, 4),
+        (PROFESSORS_RESEARCH, 4), (BOSS_ORDERS, 3), (ULTRA_BALL, 4),
+        (SWITCH, 2), (POTION, 2),
+        (LIGHTNING_ENERGY, 33), (DOUBLE_TURBO, 4),
+    ])
+
+
 DECKS = {
     "charizard_ex": charizard_deck,
     "gardevoir_ex": gardevoir_deck,
@@ -779,6 +861,10 @@ DECKS = {
     "raging_bolt_ex": raging_bolt_deck,
     "gholdengo_ex": gholdengo_deck,
     "terapagos_ex": terapagos_deck,
+    "dragapult_ex": dragapult_deck,
+    "eternatus_ex": eternatus_deck,
+    "gouging_fire_ex": gouging_fire_deck,
+    "iron_thorns_ex": iron_thorns_deck,
 }
 
 
@@ -798,6 +884,7 @@ SETS = {
     "sv10": "Destined Rivals",
     "sv11": "Prismatic Evolutions",
     "sv12": "Twilight Embers",
+    "sv13": "Mega Evolution",
 }
 
 
@@ -887,6 +974,18 @@ DECK_META = {
     "terapagos_ex": {"type": "Colorless", "archetype": "Tanky control",
         "strategy": "A high-HP Colorless wall that heals as it attacks (Crystal Guard) and runs on any energy — grind the opponent out.",
         "key_cards": ["Terapagos ex"]},
+    "dragapult_ex": {"type": "Psychic", "archetype": "Bench spread",
+        "strategy": "Phantom Dive chips the bench every turn; set up multi-prize Boss's Orders turns and pick off support Pokémon.",
+        "key_cards": ["Dragapult ex"]},
+    "eternatus_ex": {"type": "Darkness", "archetype": "All-Basic aggro",
+        "strategy": "Cheap Darkness pressure into a heavy Eternal Beam; race two-prize trades.",
+        "key_cards": ["Eternatus ex"]},
+    "gouging_fire_ex": {"type": "Fire", "archetype": "Scaling combo",
+        "strategy": "Pile energy onto Gouging Fire so Blaze Blitz scales, then one-shot a key threat.",
+        "key_cards": ["Gouging Fire ex"]},
+    "iron_thorns_ex": {"type": "Lightning", "archetype": "Status — paralysis lock",
+        "strategy": "Surging Bolt Paralyzes the Active so it can't attack or retreat — chain it to lock the opponent out while you take prizes.",
+        "key_cards": ["Iron Thorns ex"]},
 }
 
 

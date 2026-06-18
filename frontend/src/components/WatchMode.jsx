@@ -3,6 +3,13 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import Board from './Board';
 import ImageDisclaimer from './ImageDisclaimer';
+import { useFavorites } from '../favorites';
+
+function orderByFav(decks, favDecks) {
+  const fav = favDecks || [];
+  return [...decks].sort((a, b) => (fav.includes(b) ? 1 : 0) - (fav.includes(a) ? 1 : 0));
+}
+const deckLabel = (d, favDecks) => ((favDecks || []).includes(d) ? `★ ${d}` : d);
 
 function EventLog({ lines, live }) {
   const ref = useRef(null);
@@ -24,11 +31,13 @@ function EventLog({ lines, live }) {
   );
 }
 
-export default function WatchMode({ decks, agents }) {
+export default function WatchMode({ decks, agents, initialDeck, launchKey }) {
   const { user } = useAuth();
+  const { favs } = useFavorites();
   const AGENTS = agents && agents.length ? agents
     : [{ id: 'heuristic', label: 'Heuristic' }, { id: 'mcts', label: 'MCTS' }];
   const [cfg, setCfg] = useState({ deck_a: 'charizard_ex', deck_b: 'gardevoir_ex', agent_a: 'heuristic', agent_b: 'mcts' });
+  useEffect(() => { if (initialDeck) setCfg((c) => ({ ...c, deck_a: initialDeck })); }, [initialDeck, launchKey]);
   const [game, setGame] = useState(null);
   const [state, setState] = useState(null);
   const [playing, setPlaying] = useState(false);
@@ -79,7 +88,7 @@ export default function WatchMode({ decks, agents }) {
         <div className="row">
           <label className="field">Deck A
             <select value={cfg.deck_a} onChange={(e) => setCfg({ ...cfg, deck_a: e.target.value })}>
-              {decks.map((d) => <option key={d} value={d}>{d}</option>)}
+              {orderByFav(decks, favs.decks).map((d) => <option key={d} value={d}>{deckLabel(d, favs.decks)}</option>)}
             </select>
           </label>
           <label className="field">Brain A
@@ -90,7 +99,7 @@ export default function WatchMode({ decks, agents }) {
           <div style={{ fontFamily: 'var(--mono)', color: 'var(--faint)', padding: '0 6px', alignSelf: 'end', paddingBottom: 9 }}>vs</div>
           <label className="field">Deck B
             <select value={cfg.deck_b} onChange={(e) => setCfg({ ...cfg, deck_b: e.target.value })}>
-              {decks.map((d) => <option key={d} value={d}>{d}</option>)}
+              {orderByFav(decks, favs.decks).map((d) => <option key={d} value={d}>{deckLabel(d, favs.decks)}</option>)}
             </select>
           </label>
           <label className="field">Brain B

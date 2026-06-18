@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -121,3 +121,61 @@ class CardImageOverride(Base):
     card_id: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     image_url: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class HumanGame(Base):
+    """A finished two-human multiplayer match whose winner's moves were captured
+    as behavioural-cloning samples for the agents to learn from."""
+    __tablename__ = "human_games"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    match_id: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
+    mode: Mapped[str] = mapped_column(String(16), default="async")
+    deck_a: Mapped[str] = mapped_column(String(48), default="")
+    deck_b: Mapped[str] = mapped_column(String(48), default="")
+    winner_seat: Mapped[int] = mapped_column(Integer, default=0)
+    winner_name: Mapped[str] = mapped_column(String(64), default="")
+    turns: Mapped[int] = mapped_column(Integer, default=0)
+    samples: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Favorite(Base):
+    """A user's saved deck / card / set, surfaced for quick access (pinned in
+    deck pickers and listed in the Favorites tab)."""
+    __tablename__ = "favorites"
+    __table_args__ = (UniqueConstraint("user_id", "kind", "ref_id", name="uq_favorite"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    kind: Mapped[str] = mapped_column(String(8), nullable=False)   # 'deck' | 'card' | 'set'
+    ref_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class MatchRecord(Base):
+    """Durable snapshot of a two-human match. Only the inputs needed to replay
+    the game are stored (seed + deck ids + the move sequence); the engine is
+    reconstructed deterministically on load."""
+    __tablename__ = "matches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    match_id: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
+    mode: Mapped[str] = mapped_column(String(16), default="async")
+    turn_seconds: Mapped[int] = mapped_column(Integer, default=90)
+    deck_a: Mapped[str] = mapped_column(String(48), default="")
+    deck_b: Mapped[str] = mapped_column(String(48), default="")
+    seed: Mapped[int] = mapped_column(Integer, default=0)
+    moves: Mapped[str] = mapped_column(Text, default="[]")            # JSON list of action indices
+    status: Mapped[str] = mapped_column(String(16), default="waiting")
+    winner: Mapped[int | None] = mapped_column(Integer, nullable=True)  # seat, -1 draw, NULL in progress
+    seat0_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    seat0_name: Mapped[str] = mapped_column(String(64), default="Player 1")
+    seat0_joined: Mapped[bool] = mapped_column(Boolean, default=True)
+    seat1_token: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    seat1_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    seat1_joined: Mapped[bool] = mapped_column(Boolean, default=False)
+    join_code: Mapped[str] = mapped_column(String(16), default="")
+    captured: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

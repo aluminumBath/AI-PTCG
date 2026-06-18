@@ -73,6 +73,13 @@ def _startup() -> None:
         _load_image_overrides()
     except Exception as exc:
         print(f"[startup] image overrides skipped: {exc}")
+    try:
+        from multiplayer import match_store, service as mp_service
+        match_store.init(_resolve_deck)         # resolves builtin + imported decks
+        mp_service.set_store(match_store)        # write matches through to Postgres
+        mp_service.hydrate()                     # reload in-progress matches after a restart
+    except Exception as exc:
+        print(f"[startup] multiplayer store skipped: {exc}")
 
 
 # card_id -> replacement image URL, cached in memory and applied on serialization
@@ -720,6 +727,216 @@ def episodes_cancel_ep(job_id: str):
 
 
 # --------------------------------------------------------------------------- #
+# Two-human multiplayer + learning the winner's strategy
+# --------------------------------------------------------------------------- #
+from multiplayer import service as mp_service  # noqa: E402
+
+HUMAN_DATASET = os.path.join(_BACKEND_ROOT, "data_store", "human_games.jsonl")
+LEARN_JOBS: dict[str, dict] = {}
+
+
+def _capture_winner(m: dict) -> None:
+    """on_finalize hook: persist the winner's moves as imitation samples + a row."""
+    import json
+    samples = mp_service.winner_samples(m)
+    if samples:
+        try:
+            os.makedirs(os.path.dirname(HUMAN_DATASET), exist_ok=True)
+            with open(HUMAN_DATASET, "a", encoding="utf-8") as fh:
+                for s in samples:
+                    fh.write(json.dumps(s) + "\n")
+        except Exception:
+            pass
+    try:
+        from db.database import SessionLocal
+        from db.models import HumanGame
+        db = SessionLocal()
+        try:
+            w = m["winner"]
+            db.add(HumanGame(
+                match_id=m["id"], mode=m["mode"],
+                deck_a=m["deck_ids"][0], deck_b=m["deck_ids"][1],
+                winner_seat=(w if w is not None else -1),
+                winner_name=(m["seats"][w]["name"] if w is not None else "draw"),
+                turns=m["engine"].state.turn_number, samples=len(samples),
+            ))
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        pass
+
+
+class MPCreateReq(BaseModel):
+    deck_a: str = "charizard_ex"
+    deck_b: str = "gardevoir_ex"
+    mode: str = "async"            # 'async' | 'timed'
+    turn_seconds: int = 90
+    name: str = "Player 1"
+
+
+class MPJoinReq(BaseModel):
+    name: str = "Player 2"
+
+
+class MPActionReq(BaseModel):
+    index: int
+
+
+@app.post("/api/multiplayer/create")
+def mp_create(req: MPCreateReq):
+    da, db_ = _resolve_deck(req.deck_a), _resolve_deck(req.deck_b)
+    mode = req.mode if req.mode in ("async", "timed") else "async"
+    secs = max(15, min(600, req.turn_seconds))
+    mid, token = mp_service.create_match(da, db_, req.deck_a, req.deck_b, mode, secs, req.name)
+    return {"match_id": mid, "token": token, "seat": 0,
+            "join_code": mp_service.get_match(mid)["join_code"]}
+
+
+@app.post("/api/multiplayer/{mid}/join")
+def mp_join(mid: str, req: MPJoinReq):
+    token, err = mp_service.join_match(mid, req.name)
+    if err:
+        raise HTTPException(404 if "not found" in err else 409, err)
+    return {"match_id": mid, "token": token, "seat": 1}
+
+
+@app.get("/api/multiplayer/open")
+def mp_open():
+    return {"matches": mp_service.open_matches()}
+
+
+@app.get("/api/multiplayer/{mid}/state")
+def mp_state(mid: str, token: str = ""):
+    m = mp_service.get_match(mid)
+    if not m:
+        raise HTTPException(404, "match not found")
+    return mp_service.public_state(m, token or None, on_finalize=_capture_winner)
+
+
+@app.post("/api/multiplayer/{mid}/action")
+def mp_action(mid: str, req: MPActionReq, token: str = ""):
+    view, err = mp_service.apply_index(mid, token, req.index, on_finalize=_capture_winner)
+    if err:
+        code = 404 if "not found" in err else (403 if "token" in err or "your turn" in err else 400)
+        raise HTTPException(code, err)
+    return view
+
+
+@app.post("/api/multiplayer/{mid}/rematch")
+def mp_rematch(mid: str, token: str = "", swap: bool = False):
+    """Start a fresh match with the same decks, mode, and clock as a finished
+    (or in-progress) one. The requester becomes the host (seat 0); the new match
+    appears in the lobby for the opponent to join."""
+    m = mp_service.get_match(mid)
+    if not m:
+        raise HTTPException(404, "match not found")
+    seat = mp_service.seat_of(m, token)
+    if seat is None:
+        raise HTTPException(403, "invalid token")
+    da_id, db_id = m["deck_ids"]
+    if swap:
+        da_id, db_id = db_id, da_id
+    host_name = m["seats"][seat]["name"] or "Player 1"
+    new_mid, new_token = mp_service.create_match(
+        _resolve_deck(da_id), _resolve_deck(db_id), da_id, db_id,
+        m["mode"], m["turn_seconds"], host_name)
+    nm = mp_service.get_match(new_mid)
+    return {"match_id": new_mid, "token": new_token, "seat": 0,
+            "join_code": nm["join_code"], "from_match": mid}
+
+
+@app.get("/api/multiplayer/learned")
+def mp_learned():
+    """Captured human games + a peek at what winning humans tended to do."""
+    import json
+    from collections import Counter
+    from engine.actions import ActionType
+    from db.database import SessionLocal
+    from db.models import HumanGame
+    db = SessionLocal()
+    try:
+        rows = db.query(HumanGame).order_by(HumanGame.created_at.desc()).all()
+        games = [{"match_id": r.match_id, "mode": r.mode, "deck_a": r.deck_a,
+                  "deck_b": r.deck_b, "winner_seat": r.winner_seat,
+                  "winner_name": r.winner_name, "turns": r.turns,
+                  "samples": r.samples, "created_at": r.created_at.isoformat()}
+                 for r in rows]
+    finally:
+        db.close()
+    # action-type tendencies of winners, decoded from the dataset's chosen actions
+    atypes = list(ActionType)
+    mix = Counter()
+    total_samples = 0
+    if os.path.exists(HUMAN_DATASET):
+        try:
+            with open(HUMAN_DATASET, encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    total_samples += 1
+                    d = json.loads(line)
+                    feats = d.get("action_feats") or []
+                    idx = d.get("chosen_index", -1)
+                    if 0 <= idx < len(feats):
+                        onehot = feats[idx][8:8 + len(atypes)]
+                        if onehot:
+                            mix[atypes[int(max(range(len(onehot)), key=lambda i: onehot[i]))].value] += 1
+        except Exception:
+            pass
+    return {"games": games, "total_games": len(games), "total_samples": total_samples,
+            "winner_action_mix": dict(mix.most_common()),
+            "can_learn": total_samples >= 10}
+
+
+@app.get("/api/multiplayer/dataset")
+def mp_dataset():
+    from fastapi.responses import FileResponse
+    if not os.path.exists(HUMAN_DATASET):
+        raise HTTPException(404, "no human games captured yet")
+    return FileResponse(HUMAN_DATASET, media_type="application/x-ndjson",
+                        filename="human_games.jsonl")
+
+
+class LearnReq(BaseModel):
+    epochs: int = 6
+    lr: float = 1e-3
+
+
+@app.post("/api/multiplayer/learn")
+def mp_learn(req: LearnReq):
+    """Behaviourally-clone the captured human-winner moves into the policy the
+    `rl`/`rl_mcts` agents use, as a background job."""
+    import threading
+    job_id = uuid.uuid4().hex[:12]
+    LEARN_JOBS[job_id] = {"status": "running", "history": [], "samples": 0, "error": None}
+
+    def worker():
+        try:
+            from rl.imitation import clone_from_file
+            res = clone_from_file(
+                HUMAN_DATASET, CKPT, CKPT,
+                epochs=max(1, min(50, req.epochs)), lr=req.lr, min_samples=10,
+                log=lambda rec: LEARN_JOBS[job_id]["history"].append(rec),
+            )
+            LEARN_JOBS[job_id].update(status="done", samples=res["samples"])
+        except Exception as exc:
+            LEARN_JOBS[job_id].update(status="error", error=str(exc))
+
+    threading.Thread(target=worker, daemon=True).start()
+    return {"job_id": job_id}
+
+
+@app.get("/api/multiplayer/learn/{job_id}")
+def mp_learn_status(job_id: str):
+    job = LEARN_JOBS.get(job_id)
+    if not job:
+        raise HTTPException(404, "learn job not found")
+    return job
+
+
+# --------------------------------------------------------------------------- #
 # Lifetime model scoreboard (every game involving a model is recorded)
 # --------------------------------------------------------------------------- #
 @app.get("/api/models/stats")
@@ -876,3 +1093,71 @@ def admin_users(user: User = Depends(current_user), db: Session = Depends(get_db
         {"id": u.id, "username": u.username, "email": u.email,
          "is_admin": u.is_admin, "created_at": u.created_at.isoformat()} for u in rows
     ]}
+
+
+# --------------------------------------------------------------------------- #
+# Favorites — a user's saved decks / cards / sets, surfaced for quick battle
+# --------------------------------------------------------------------------- #
+_FAV_KINDS = {"deck", "card", "set"}
+
+
+class FavReq(BaseModel):
+    kind: str
+    ref_id: str
+
+
+def _valid_favorite(kind: str, ref_id: str) -> bool:
+    if not ref_id or len(ref_id) > 64:
+        return False
+    if kind == "set":
+        from data.cards_db import builtin_sets
+        return any(s["code"] == ref_id for s in builtin_sets())
+    if kind == "deck":
+        try:
+            _resolve_deck(ref_id)   # builtin or imported deck
+            return True
+        except Exception:
+            return False
+    if kind == "card":
+        return True  # card ids come from the live catalogue; accept any well-formed id
+    return False
+
+
+def _favorites_for(user, db) -> dict:
+    from db.models import Favorite
+    rows = (db.query(Favorite).filter(Favorite.user_id == user.id)
+            .order_by(Favorite.created_at.asc()).all())
+    out = {"deck": [], "card": [], "set": []}
+    for r in rows:
+        out.setdefault(r.kind, []).append(r.ref_id)
+    return {"decks": out["deck"], "cards": out["card"], "sets": out["set"]}
+
+
+@app.get("/api/favorites")
+def favorites_list(user: User = Depends(current_user), db=Depends(get_db)):
+    return _favorites_for(user, db)
+
+
+@app.post("/api/favorites")
+def favorites_add(req: FavReq, user: User = Depends(current_user), db=Depends(get_db)):
+    from db.models import Favorite
+    if req.kind not in _FAV_KINDS:
+        raise HTTPException(400, "kind must be one of: deck, card, set")
+    if not _valid_favorite(req.kind, req.ref_id):
+        raise HTTPException(404, f"unknown {req.kind} '{req.ref_id}'")
+    exists = (db.query(Favorite)
+              .filter_by(user_id=user.id, kind=req.kind, ref_id=req.ref_id).first())
+    if not exists:
+        db.add(Favorite(user_id=user.id, kind=req.kind, ref_id=req.ref_id))
+        db.commit()
+    return _favorites_for(user, db)
+
+
+@app.delete("/api/favorites/{kind}/{ref_id}")
+def favorites_remove(kind: str, ref_id: str,
+                     user: User = Depends(current_user), db=Depends(get_db)):
+    from db.models import Favorite
+    (db.query(Favorite)
+     .filter_by(user_id=user.id, kind=kind, ref_id=ref_id).delete())
+    db.commit()
+    return _favorites_for(user, db)
