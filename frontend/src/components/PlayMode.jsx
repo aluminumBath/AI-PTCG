@@ -62,11 +62,14 @@ export default function PlayMode({ decks, agents, initialDeck, launchKey }) {
         <div className="row">
           <label className="field">Your deck
             <select value={cfg.deck_a} onChange={(e) => setCfg({ ...cfg, deck_a: e.target.value })}>
+              <option value="random">🎲 Random deck</option>
               {orderByFav(decks, favs.decks).map((d) => <option key={d} value={d}>{deckLabel(d, favs.decks)}</option>)}
             </select>
           </label>
           <label className="field">Opponent deck
             <select value={cfg.deck_b} onChange={(e) => setCfg({ ...cfg, deck_b: e.target.value })}>
+              <option value="auto">🤖 Agent's pick</option>
+              <option value="random">🎲 Random deck</option>
               {orderByFav(decks, favs.decks).map((d) => <option key={d} value={d}>{deckLabel(d, favs.decks)}</option>)}
             </select>
           </label>

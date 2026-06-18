@@ -14,3 +14,6 @@ frontend/.env
 # OS / editor
 .DS_Store
 *.swp
+
+Card_ID List_JP.pdf
+Card_ID List_EN_orig.pdf

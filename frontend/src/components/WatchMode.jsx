@@ -81,13 +81,15 @@ export default function WatchMode({ decks, agents, initialDeck, launchKey }) {
       <div className="page-head">
         <div className="eyebrow">Mode · Spectate</div>
         <h1>Watch agents duel</h1>
-        <p className="sub">Pit any two brains against each other on real Standard decks. The active side glows in its Pokémon's energy type; the prize track fills as KOs land.</p>
+        <p className="sub">Pit any two brains against each other on real Standard decks — or set a deck to <b>🎲 Random</b> or <b>🤖 Agent's pick</b> (a deck matching that agent's style). The chosen deck shows on each side once the match starts. The active side glows in its Pokémon's energy type; the prize track fills as KOs land.</p>
       </div>
 
       <div className="panel pad" style={{ marginBottom: 16 }}>
         <div className="row">
           <label className="field">Deck A
             <select value={cfg.deck_a} onChange={(e) => setCfg({ ...cfg, deck_a: e.target.value })}>
+              <option value="auto">🤖 Agent's pick</option>
+              <option value="random">🎲 Random deck</option>
               {orderByFav(decks, favs.decks).map((d) => <option key={d} value={d}>{deckLabel(d, favs.decks)}</option>)}
             </select>
           </label>
@@ -99,6 +101,8 @@ export default function WatchMode({ decks, agents, initialDeck, launchKey }) {
           <div style={{ fontFamily: 'var(--mono)', color: 'var(--faint)', padding: '0 6px', alignSelf: 'end', paddingBottom: 9 }}>vs</div>
           <label className="field">Deck B
             <select value={cfg.deck_b} onChange={(e) => setCfg({ ...cfg, deck_b: e.target.value })}>
+              <option value="auto">🤖 Agent's pick</option>
+              <option value="random">🎲 Random deck</option>
               {orderByFav(decks, favs.decks).map((d) => <option key={d} value={d}>{deckLabel(d, favs.decks)}</option>)}
             </select>
           </label>

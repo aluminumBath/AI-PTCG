@@ -256,12 +256,25 @@ def agents():
 @app.post("/api/game/new")
 def new_game(req: NewGame):
     import random
+    from data.deck_select import resolve_deck_token
     seed = req.seed if req.seed is not None else random.randint(0, 2**31 - 1)
-    deck_a_cards = _resolve_deck(req.deck_a)
-    deck_b_cards = _resolve_deck(req.deck_b)
+
+    # Which agent (if any) sits in each seat — used for "agent's pick" decks.
+    if req.mode == "human_vs_ai":
+        ai_seat = 1 - req.human_seat
+        seat_agent = {req.human_seat: None, ai_seat: req.agent_b}
+    else:
+        seat_agent = {0: req.agent_a, 1: req.agent_b}
+
+    # 'random' / 'auto' resolve to a concrete deck id (seat B avoids mirroring A).
+    deck_a_id = resolve_deck_token(req.deck_a, seat_agent.get(0), seed + 101)
+    deck_b_id = resolve_deck_token(req.deck_b, seat_agent.get(1), seed + 202, exclude=deck_a_id)
+
+    deck_a_cards = _resolve_deck(deck_a_id)
+    deck_b_cards = _resolve_deck(deck_b_id)
     engine = GameEngine.new_game(
         deck_a_cards, deck_b_cards,
-        names=(req.deck_a, req.deck_b), seed=seed,
+        names=(deck_a_id, deck_b_id), seed=seed,
     )
     if req.mode == "human_vs_ai":
         ai_seat = 1 - req.human_seat
@@ -277,7 +290,9 @@ def new_game(req: NewGame):
     if req.mode == "human_vs_ai":
         _advance_ai_until_human(SESSIONS[gid])
         _record_session_result(SESSIONS[gid])
-    return {"game_id": gid, "seed": seed, "state": _view(SESSIONS[gid])}
+    return {"game_id": gid, "seed": seed,
+            "deck_a": deck_a_id, "deck_b": deck_b_id,
+            "state": _view(SESSIONS[gid])}
 
 
 def _advance_ai_until_human(sess: Session, guard_max: int = 500) -> None:

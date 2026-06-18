@@ -38,6 +38,13 @@ rules-faithful environment — plus a polished web app to **watch** agents duel,
   **Favorites** tab). Favorited decks are pinned to the top of every deck picker
   (Watch, Play, and multiplayer) and can jump straight into battle from the
   Favorites tab, so your kit is always ready.
+- **Pick a deck, randomize, or let the agent choose** — in Watch and Play, any AI
+  side's deck can be a specific deck, **🎲 Random**, or **🤖 Agent's pick** (a deck
+  matching that agent's playstyle: aggro/control/setup agents draw from a matching
+  pool, others get a versatile midrange/combo deck). The opponent avoids mirroring
+  when random, choices are seed-reproducible, and the deck actually chosen is shown
+  on each side once the match starts. (`POST /api/game/new` accepts `deck_a`/`deck_b`
+  values `random` or `auto`, and returns the resolved `deck_a`/`deck_b`.)
 - **Full-stack app** — FastAPI backend + React/Vite frontend, Postgres-backed
   accounts (login, history, admin), Dockerized locally and deployable to Render
   with a Neon database.
@@ -458,6 +465,32 @@ matrix, so you can see which model is the strongest opponent. Tournaments run as
 a background job — `GET /api/tournament/{job_id}` reports live progress and the
 final result. Add a model once in `backend/agents/registry.py` and it shows up
 everywhere: the game modes, the arena, and the dropdowns.
+
+### Are the results trustworthy? (confidence + consistency)
+
+A win rate from a finite number of games is a noisy estimate, so the arena now
+shows whether a result is real signal or small-sample noise:
+
+- **Diagnostics** (auto-loads under the results; `GET /api/tournament/{job_id}/validate`)
+  attaches a **95% Wilson confidence interval** and **standard error** to every
+  win rate (shown beneath each bar in Standings) and runs sanity checks:
+  *sample adequacy* (how wide is the widest CI?), *draw rate* (are games stalling
+  to the turn cap?), *baseline sanity* (does the `random` model sit near the
+  bottom, beaten with CI separation?), *top-rank separation* (are #1 and #2
+  actually distinguishable or within noise?), and *per-matchup reliability*
+  (flags head-to-heads decided on too few games). A verdict summarises it as
+  *looks solid / ok, with notes / needs care*.
+- **Consistency check** (`POST /api/validate/consistency`, background job) replays
+  one matchup over several **independent seeded batches** and reports each batch's
+  win rate plus the **mean ± standard deviation** across batches (with a small
+  per-batch bar chart and a pooled CI) — a direct read on how stable a model is
+  run-to-run, which is exactly what the competition's "consistency under repeated
+  matches" criterion rewards. Low SD = dependable; high SD = the result swings
+  with the run.
+
+> Rule of thumb: if a model's 95% CI overlaps another's, their order isn't
+> established yet — raise *games per pairing* (or batches) until the intervals
+> separate.
 
 ---
 
