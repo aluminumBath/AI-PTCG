@@ -391,6 +391,61 @@ true state, and the **RL** policy operates only on the observable encoding — b
 appropriate for the contest. This repo is unaffiliated with The Pokémon Company
 and Kaggle.
 
+### Export for Kaggle (Competition tab)
+
+The **Competition** tab has an **Export for Kaggle** panel. Pick a deck and the
+agent that pilots it, then:
+
+- **Export AI sim (.tar.gz)** → downloads `submission.tar.gz` for the *Simulation*
+  category with `main.py` and `deck.csv` at the **top level** (plus a short
+  README). `main.py` is a Kaggle-Environments agent (`agent(observation,
+  configuration)`) carrying the chosen strategy, with a clearly marked
+  observation/action seam. To finish a submission: add the competition `cg/`
+  library (from the **cg-lib** dataset) next to `main.py`, fill any blank
+  `card_id`s in `deck.csv` from the official card data, then rebuild with
+  `tar -czvf submission.tar.gz *`. (Endpoint: `GET /api/competition/export/sim`.)
+- **Export AI strategy (Writeup)** → downloads `writeup.md` for the *Strategy*
+  category: a Markdown report (**≤2000 words**) structured around the judging
+  rubric (**Model 70% / Deck 20% / Report 10%**) with figure placeholders and a
+  Media-Gallery license reminder. Optional title/subtitle fields customise the
+  header. (Endpoint: `GET /api/competition/export/strategy`.) Replace the figure
+  placeholders with your own charts/screenshots before submitting, and confirm
+  every image uses only the licensed Pokémon Elements.
+
+> If the official `EN Card Data.csv` is available to the backend (env var
+> `PTCG_CARD_DATA`, or `backend/data_store/EN Card Data.csv`), `deck.csv`'s
+> `card_id` column is auto-filled by matching on card name; otherwise it's left
+> blank with a note.
+
+### Official card data toggle (fixing card images)
+
+The built-in card images are derived from illustrative card ids, so some are
+wrong. The competition ships authoritative **card data** (`EN Card Data.csv`,
+from the [Data page](https://www.kaggle.com/competitions/pokemon-tcg-ai-battle/data))
+and image assets. Drop them into `frontend/public/assets/` and flip the
+**Official card data** switch in the sidebar: the Card explorer and battle boards
+then use official names/metadata and images (matched to our cards by name).
+
+Expected layout under `frontend/public/assets/`:
+
+```
+assets/EN Card Data.csv        # the competition card metadata (any of:
+                               #   EN Card Data.csv / en_card_data.csv / cards.csv)
+assets/images/<Card ID>.png    # card images (default path pattern)
+```
+
+The image path pattern is configurable in `frontend/public/config.js` if your
+assets are laid out differently — tokens `{id} {name} {expansion} {no}`:
+
+```js
+window.__OFFICIAL_IMG__ = "assets/images/{id}.png";
+```
+
+> **License.** Per the competition rules, the Pokémon card data and image assets
+> are licensed for competition use only — keep them local (they're git-ignored
+> under `public/assets/`) and delete them after the competition. The sidebar
+> toggle also links to the official rules.
+
 ---
 
 ## Compare models (Model arena)

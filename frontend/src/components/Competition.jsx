@@ -14,6 +14,25 @@ export default function Competition() {
   const [err, setErr] = useState('');
   const poll = useRef(null);
 
+  // Kaggle export controls (deck + agent + optional writeup title/subtitle)
+  const [decks, setDecks] = useState([]);
+  const [agents, setAgents] = useState([]);
+  const [xdeck, setXdeck] = useState('');
+  const [xagent, setXagent] = useState('ismcts');
+  const [xtitle, setXtitle] = useState('');
+  const [xsub, setXsub] = useState('');
+
+  useEffect(() => {
+    api.decks().then((d) => {
+      const ids = (d.decks || d || []).map((x) => (typeof x === 'string' ? x : x.id));
+      setDecks(ids);
+      if (ids.length) setXdeck((prev) => prev || ids[0]);
+    }).catch(() => {});
+    api.agents().then((a) => setAgents(a.models || a.agents || [])).catch(() => {});
+  }, []);
+
+  const dl = (url) => { const a = document.createElement('a'); a.href = url; a.rel = 'noopener'; a.click(); };
+
   useEffect(() => { api.competitionInfo().then(setInfo).catch((e) => setErr(e.message)); }, []);
 
   function startPolling() {
@@ -131,6 +150,63 @@ export default function Competition() {
             {report?.markdown && (
               <pre className="report" style={{ marginTop: 12 }}>{report.markdown}</pre>
             )}
+          </div>
+
+          <div className="panel pad" style={{ marginTop: 16 }}>
+            <div className="row between" style={{ marginBottom: 4 }}>
+              <b style={{ fontFamily: 'var(--display)' }}>Export for Kaggle</b>
+              <span className="tag">Simulation + Strategy</span>
+            </div>
+            <p className="sub" style={{ fontSize: 12.5, marginTop: 0 }}>
+              Pick a deck and the agent that pilots it, then export a ready-to-submit
+              Simulation bundle or a Strategy Writeup draft.
+            </p>
+            <div className="row" style={{ gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
+              <label className="field">Deck
+                <select value={xdeck} onChange={(e) => setXdeck(e.target.value)} style={{ minWidth: 180 }}>
+                  {decks.map((d) => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </label>
+              <label className="field">Agent
+                <select value={xagent} onChange={(e) => setXagent(e.target.value)} style={{ minWidth: 160 }}>
+                  {(agents.length ? agents : [{ id: 'ismcts', label: 'ISMCTS' }]).map((m) => {
+                    const id = typeof m === 'string' ? m : m.id;
+                    const label = typeof m === 'string' ? m : (m.label || m.id);
+                    return <option key={id} value={id}>{label}</option>;
+                  })}
+                </select>
+              </label>
+            </div>
+
+            <div className="row" style={{ gap: 10, marginTop: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <button className="btn primary" disabled={!xdeck} onClick={() => dl(api.exportSimUrl(xdeck, xagent))}>
+                Export AI sim (.tar.gz)
+              </button>
+              <span className="sub" style={{ fontSize: 12, maxWidth: 360 }}>
+                Top-level <code>main.py</code> + <code>deck.csv</code>. Add the <code>cg/</code> library,
+                then <code>tar -czvf submission.tar.gz *</code>.
+              </span>
+            </div>
+
+            <div style={{ borderTop: '1px solid var(--line)', margin: '14px 0' }} />
+
+            <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+              <label className="field grow">Writeup title (optional)
+                <input value={xtitle} onChange={(e) => setXtitle(e.target.value)} placeholder="e.g. Gardevoir ex — patient control" />
+              </label>
+              <label className="field grow">Subtitle (optional)
+                <input value={xsub} onChange={(e) => setXsub(e.target.value)} placeholder="one-line thesis" />
+              </label>
+            </div>
+            <div className="row" style={{ gap: 10, marginTop: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <button className="btn" disabled={!xdeck} onClick={() => dl(api.exportStrategyUrl(xdeck, xagent, xtitle, xsub))}>
+                Export AI strategy (Writeup)
+              </button>
+              <span className="sub" style={{ fontSize: 12, maxWidth: 360 }}>
+                Markdown Writeup (≤2000 words) structured for the Model 70% / Deck 20% / Report 10% rubric.
+                Add license-compliant figures to the Media Gallery before submitting.
+              </span>
+            </div>
           </div>
 
           <p className="sub" style={{ marginTop: 14, fontSize: 12 }}>{info.disclaimer}</p>

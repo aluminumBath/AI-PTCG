@@ -646,6 +646,61 @@ def competition_report_status(job_id: str):
     return job
 
 
+def _agent_label(agent_id: str) -> str:
+    from agents.registry import list_agents
+    for a in list_agents():
+        if a.get("id") == agent_id:
+            return a.get("label", agent_id)
+    return agent_id
+
+
+@app.get("/api/competition/export/sim")
+def competition_export_sim(deck: str, agent: str = "ismcts"):
+    """Build a Simulation submission as submission.tar.gz (top-level main.py +
+    deck.csv + README). Add the cg/ library and re-tar to submit."""
+    from fastapi.responses import Response
+    from competition.export import build_sim_bundle
+    try:
+        _resolve_deck(deck)  # validate the deck id (raises if unknown)
+    except Exception:
+        raise HTTPException(404, f"unknown deck '{deck}'")
+    blob = build_sim_bundle(deck, agent, _agent_label(agent), _resolve_deck)
+    return Response(
+        content=blob, media_type="application/gzip",
+        headers={"Content-Disposition": 'attachment; filename="submission.tar.gz"'},
+    )
+
+
+@app.get("/api/competition/export/strategy")
+def competition_export_strategy(deck: str, agent: str = "ismcts",
+                                title: str = "", subtitle: str = ""):
+    """Build a Strategy-category Writeup (Markdown, <= 2000 words) for the deck +
+    agent, structured around the Model/Deck/Report rubric."""
+    from fastapi.responses import Response
+    from competition.export import build_strategy_writeup
+    try:
+        _resolve_deck(deck)
+    except Exception:
+        raise HTTPException(404, f"unknown deck '{deck}'")
+    # fold in the latest stats for this model if we have them
+    stats = None
+    try:
+        from stats.model_stats import list_stats
+        for row in list_stats():
+            if row.get("model") == agent and row.get("games"):
+                stats = {"games": row["games"], "winrate": row.get("winrate", 0)}
+                break
+    except Exception:
+        stats = None
+    md = build_strategy_writeup(deck, agent, _agent_label(agent),
+                                title=title or None, subtitle=subtitle or None,
+                                stats=stats)
+    return Response(
+        content=md, media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="writeup.md"'},
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Skill-rating ladder — Submissions & Episodes
 # --------------------------------------------------------------------------- #
