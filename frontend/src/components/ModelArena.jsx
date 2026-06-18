@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
+import Board from './Board';
 
 const FAMILY_COLOR = {
   baseline: 'var(--metal)', 'rule-based': 'var(--lightning)',
@@ -25,7 +26,11 @@ export default function ModelArena({ models, decks }) {
   const [job, setJob] = useState(null);
   const [status, setStatus] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [watch, setWatch] = useState(false);
+  const watchRef = useRef(false);
   const poll = useRef(null);
+
+  useEffect(() => { watchRef.current = watch; }, [watch]);
 
   useEffect(() => {
     if (models?.length && picked.length === 0) {
@@ -38,6 +43,7 @@ export default function ModelArena({ models, decks }) {
 
   function startPolling(jobId) {
     clearInterval(poll.current);
+    const everyMs = watchRef.current ? 700 : 1200;  // livelier updates while watching
     poll.current = setInterval(async () => {
       try {
         const s = await api.tournamentStatus(jobId);
@@ -51,8 +57,14 @@ export default function ModelArena({ models, decks }) {
         clearInterval(poll.current);  // job gone (server restart) — stop and clear
         localStorage.removeItem(ARENA_JOB_KEY);
       }
-    }, 1200);
+    }, everyMs);
   }
+
+  // re-arm polling at the faster cadence when the user starts watching mid-run
+  useEffect(() => {
+    if (job && status?.status === 'running') startPolling(job);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watch]);
 
   // re-attach to a running/finished job after a tab switch or full refresh
   useEffect(() => {
@@ -161,11 +173,46 @@ export default function ModelArena({ models, decks }) {
         <div className="panel pad" style={{ marginBottom: 16 }}>
           <div className="row between" style={{ marginBottom: 8 }}>
             <span className="live"><span className="blip" /> playing matches…</span>
-            <span className="tag">{status.done} / {status.total} games</span>
+            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+              <button className={`btn sm ${watch ? 'primary' : ''}`} onClick={() => setWatch((w) => !w)}>
+                {watch ? 'Hide battle' : '👁 Watch battle'}
+              </button>
+              <span className="tag">{status.done} / {status.total} games</span>
+            </div>
           </div>
           <div className="bar"><div className="bar-fill" style={{ width: `${pct}%` }} /></div>
           <p className="sub" style={{ marginTop: 8, fontSize: 12 }}>This runs on the server — you can switch tabs or refresh and it keeps going. Use Stop to end it early (partial results are kept).</p>
         </div>
+      )}
+
+      {running && watch && (
+        status?.current ? (
+          <div className="panel pad" style={{ marginBottom: 16 }}>
+            <div className="row between" style={{ marginBottom: 6 }}>
+              <span className="live you"><span className="blip" /> Live · game {status.current.game_no} / {status.current.total_games}</span>
+              <span className="tag">Turn {status.current.turn}</span>
+            </div>
+            <div className="row between" style={{ marginBottom: 10, fontSize: 12.5, flexWrap: 'wrap', gap: 6 }}>
+              <span><b>{labelOf(status.current.seat0_agent)}</b> <span className="mono" style={{ color: 'var(--muted)' }}>· {status.current.deck0}</span></span>
+              <span style={{ color: 'var(--faint)' }}>vs</span>
+              <span><b>{labelOf(status.current.seat1_agent)}</b> <span className="mono" style={{ color: 'var(--muted)' }}>· {status.current.deck1}</span></span>
+            </div>
+            <div className="arena">
+              <Board player={status.current.state.players[1]} activeTurn={status.current.state.current_player === 1} flip />
+              <Board player={status.current.state.players[0]} activeTurn={status.current.state.current_player === 0} />
+            </div>
+            <div className="log" style={{ marginTop: 10, maxHeight: 170 }}>
+              {(status.current.state.log || []).slice().reverse().map((l, i) => {
+                const m = l.match(/^(T\d+:)\s*(.*)$/);
+                return <div className="ln" key={i}>{m ? <><span className="t">{m[1]}</span>{m[2]}</> : l}</div>;
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="panel pad" style={{ marginBottom: 16 }}>
+            <span className="sub" style={{ fontSize: 13 }}>Loading the current battle… (search-heavy models think for a few seconds per move)</span>
+          </div>
+        )
       )}
 
       {status?.status === 'cancelled' && (

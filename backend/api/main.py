@@ -508,7 +508,7 @@ def tournament_run(req: TournamentReq):
     job_id = uuid.uuid4().hex[:12]
     TOURNAMENTS[job_id] = {
         "status": "running", "done": 0, "total": total, "cancel": False,
-        "result": None, "error": None,
+        "result": None, "error": None, "current": None,
         "config": {"agents": agent_ids, "decks": req.decks, "games_per_pairing": games},
     }
 
@@ -517,12 +517,18 @@ def tournament_run(req: TournamentReq):
             def prog(d, t):
                 TOURNAMENTS[job_id]["done"] = d
                 TOURNAMENTS[job_id]["total"] = t
+
+            def on_state(snap):
+                TOURNAMENTS[job_id]["current"] = snap
+
             res = run_tournament(
                 agent_ids, req.decks, games,
                 deck_resolver=_resolve_deck, checkpoint=CKPT, progress=prog,
                 should_continue=lambda: not TOURNAMENTS[job_id].get("cancel"),
+                on_state=on_state,
             )
             TOURNAMENTS[job_id]["result"] = res
+            TOURNAMENTS[job_id]["current"] = None  # tournament finished; drop live frame
             TOURNAMENTS[job_id]["status"] = "cancelled" if res.get("cancelled") else "done"
         except Exception as exc:  # surface to the client, don't crash the server
             TOURNAMENTS[job_id]["status"] = "error"

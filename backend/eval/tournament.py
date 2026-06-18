@@ -17,14 +17,23 @@ from agents.registry import make_agent
 
 
 def play_match(agent_a: Agent, agent_b: Agent, deck_a, deck_b,
-               seed: int, max_turns: int = 200, max_steps: int = 20000):
-    """Play one game. Returns (winner_seat | None, turns)."""
+               seed: int, max_turns: int = 200, max_steps: int = 20000,
+               on_move: Optional[Callable[[GameEngine], None]] = None):
+    """Play one game. Returns (winner_seat | None, turns).
+
+    If ``on_move`` is given it's called with the engine after the initial setup
+    and after every applied action, so a caller can stream the live board.
+    """
     eng = GameEngine.new_game(deck_a, deck_b, seed=seed)
     agents = [agent_a, agent_b]
     steps = 0
+    if on_move:
+        on_move(eng)
     while not eng.state.is_over() and eng.state.turn_number <= max_turns and steps < max_steps:
         eng.apply(agents[eng.state.current_player].select(eng))
         steps += 1
+        if on_move:
+            on_move(eng)
     return eng.state.winner, eng.state.turn_number
 
 
@@ -38,7 +47,9 @@ def run_tournament(
     seed: int = 0,
     record: bool = True,
     should_continue: Optional[Callable[[], bool]] = None,
+    on_state: Optional[Callable[[dict], None]] = None,
 ) -> dict:
+    import time as _time
     agent_ids = list(dict.fromkeys(agent_ids))  # dedupe, keep order
     if len(agent_ids) < 2:
         raise ValueError("Pick at least two models to compare.")
@@ -67,10 +78,34 @@ def run_tournament(
             seat0, seat1 = (a, b) if g % 2 == 0 else (b, a)
             d0 = deck_ids[g % len(deck_ids)]
             d1 = deck_ids[(g + 1) % len(deck_ids)]
+
+            on_move = None
+            if on_state:
+                last = [0.0]  # wall-clock of the last emitted snapshot (throttle)
+                game_no = done + 1
+
+                def on_move(eng, _seat0=seat0, _seat1=seat1, _d0=d0, _d1=d1,
+                            _last=last, _game_no=game_no):
+                    now = _time.time()
+                    over = eng.state.is_over()
+                    if not over and now - _last[0] < 0.12:
+                        return  # cap update rate; always emit the final frame
+                    _last[0] = now
+                    st = eng.state.to_dict(viewer=None)  # full spectator view
+                    on_state({
+                        "game_no": _game_no, "total_games": total,
+                        "seat0_agent": _seat0, "seat1_agent": _seat1,
+                        "deck0": _d0, "deck1": _d1,
+                        "turn": st.get("turn_number"),
+                        "current_player": st.get("current_player"),
+                        "over": over, "winner": st.get("winner"),
+                        "state": st,
+                    })
+
             winner, turns = play_match(
                 agents[seat0], agents[seat1],
                 deck_resolver(d0), deck_resolver(d1),
-                seed=rng.randint(0, 2**31 - 1),
+                seed=rng.randint(0, 2**31 - 1), on_move=on_move,
             )
             for aid in (seat0, seat1):
                 stats[aid]["games"] += 1
