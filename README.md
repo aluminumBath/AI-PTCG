@@ -214,10 +214,14 @@ The blueprint deploys a **backend** (Docker web service) and a **frontend**
    - `ADMIN_PASSWORD` → a private password for the admin account
    - (`JWT_SECRET` is auto-generated; `POKEMONTCG_API_KEY` is optional.)
 4. Let the backend deploy, then copy its public URL
-   (e.g. `https://tcg-backend.onrender.com`).
-5. On **tcg-frontend**, set `VITE_API_BASE` to that backend URL and trigger a
-   deploy (a static build bakes the URL in; you can also override at runtime via
-   the container's `API_BASE` env when self-hosting the frontend image).
+   (e.g. `https://tcg-backend.onrender.com`). Use the **HTTPS URL with no port** —
+   Render exposes services on 443, **not** the internal `:8000`.
+5. On **tcg-frontend**, set `VITE_API_BASE` to that backend URL — e.g.
+   `https://tcg-backend.onrender.com` (https, no `:8000`, no trailing slash) — and
+   trigger a deploy (a static build bakes the URL in; you can also override at
+   runtime via the container's `API_BASE` env when self-hosting the frontend
+   image). As a safety net the client auto-rewrites any `*.onrender.com` base to
+   https without a port, so a copy-pasted internal URL still works.
 
 On first boot the backend creates its tables in Neon and seeds the admin user.
 

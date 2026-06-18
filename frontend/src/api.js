@@ -1,9 +1,24 @@
 // Thin API client. Base URL is injected at build time (VITE_API_BASE) and can
 // be overridden at runtime via window.__API_BASE__ (used by the Docker image).
-const BASE =
+let BASE =
   (typeof window !== 'undefined' && window.__API_BASE__) ||
   import.meta.env.VITE_API_BASE ||
   'http://localhost:8000';
+
+// Render exposes services over HTTPS on the default port (443). A common
+// mistake is pointing the frontend at the internal "…onrender.com:8000" or at
+// http://. Normalise any *.onrender.com base to https with no explicit port so
+// a copy-pasted URL still works (and we don't hit mixed-content blocks).
+try {
+  const u = new URL(BASE);
+  if (u.hostname.endsWith('.onrender.com')) {
+    u.protocol = 'https:';
+    u.port = '';
+  }
+  BASE = u.toString().replace(/\/+$/, '');
+} catch {
+  /* leave BASE as-is if it isn't a parseable absolute URL */
+}
 
 function authHeaders() {
   const t = localStorage.getItem('tcg_token');

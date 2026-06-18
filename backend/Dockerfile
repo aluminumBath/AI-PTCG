@@ -25,7 +25,7 @@ COPY . .
 
 EXPOSE 8000
 
-# Launch via the Python module rather than the bare `uvicorn` console script:
-# this only requires the package to be importable, so it can't fail with
-# "uvicorn: executable file not found in $PATH".
-CMD ["python", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Bind the port Render injects via $PORT (defaults to 8000 locally / in Docker
+# Compose, where PORT is unset). Shell form so the variable expands. Launch via
+# the Python module so it can't fail with "uvicorn: not found in $PATH".
+CMD ["sh", "-c", "python -m uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
