@@ -571,6 +571,86 @@ def tournament_status(job_id: str):
     return job
 
 
+@app.get("/api/tournament/{job_id}/validate")
+def tournament_validate(job_id: str):
+    """Attach confidence intervals + sanity checks to a finished tournament."""
+    job = TOURNAMENTS.get(job_id)
+    if not job:
+        raise HTTPException(404, "tournament not found")
+    if not job.get("result"):
+        raise HTTPException(400, "tournament has no result yet")
+    from eval.validate import validate_tournament
+    return validate_tournament(job["result"])
+
+
+# --- Consistency: repeated seeded batches -> mean ± standard deviation ------ #
+CONSISTENCY: dict[str, dict] = {}
+
+
+class ConsistencyReq(BaseModel):
+    agent_a: str
+    agent_b: str = "random"
+    decks: list[str] = ["charizard_ex", "gardevoir_ex"]
+    batches: int = 5
+    games_per_batch: int = 20
+    seed: Optional[int] = None
+
+
+@app.post("/api/validate/consistency")
+def consistency_run(req: ConsistencyReq):
+    import random as _r
+    from eval.validate import run_consistency
+    batches = max(2, min(20, req.batches))
+    gpb = max(2, min(50, req.games_per_batch))
+    decks = req.decks or ["charizard_ex", "gardevoir_ex"]
+    seed = req.seed if req.seed is not None else _r.randint(0, 2**31 - 1)
+    job_id = uuid.uuid4().hex[:12]
+    CONSISTENCY[job_id] = {
+        "status": "running", "done": 0, "total": batches * gpb, "cancel": False,
+        "result": None, "error": None,
+        "config": {"agent_a": req.agent_a, "agent_b": req.agent_b,
+                   "batches": batches, "games_per_batch": gpb, "decks": decks},
+    }
+
+    def worker():
+        try:
+            def prog(d, t):
+                CONSISTENCY[job_id]["done"] = d
+                CONSISTENCY[job_id]["total"] = t
+            res = run_consistency(
+                req.agent_a, req.agent_b, decks, batches, gpb,
+                deck_resolver=_resolve_deck, checkpoint=CKPT, seed=seed,
+                progress=prog,
+                should_continue=lambda: not CONSISTENCY[job_id].get("cancel"),
+            )
+            CONSISTENCY[job_id]["result"] = res
+            CONSISTENCY[job_id]["status"] = "cancelled" if res.get("cancelled") else "done"
+        except Exception as exc:
+            CONSISTENCY[job_id]["status"] = "error"
+            CONSISTENCY[job_id]["error"] = str(exc)
+
+    threading.Thread(target=worker, daemon=True).start()
+    return {"job_id": job_id, "total_games": batches * gpb}
+
+
+@app.get("/api/validate/consistency/{job_id}")
+def consistency_status(job_id: str):
+    job = CONSISTENCY.get(job_id)
+    if not job:
+        raise HTTPException(404, "consistency job not found")
+    return job
+
+
+@app.post("/api/validate/consistency/{job_id}/cancel")
+def consistency_cancel(job_id: str):
+    job = CONSISTENCY.get(job_id)
+    if not job:
+        raise HTTPException(404, "consistency job not found")
+    if job["status"] == "running":
+        job["cancel"] = True
+    return {"job_id": job_id, "status": job["status"], "cancelling": job.get("cancel", False)}
+
+
 # --------------------------------------------------------------------------- #
 # PTCG AI Battle Challenge (Kaggle) — competition info + strategy report
 # --------------------------------------------------------------------------- #

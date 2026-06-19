@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from './api';
 import { AuthProvider, useAuth } from './auth';
 import BootGate from './components/BootGate';
+import { useOfficial } from './officialData';
 import Login from './components/Login';
 import WatchMode from './components/WatchMode';
 import PlayMode from './components/PlayMode';
@@ -35,6 +36,43 @@ const NAV = [
   { id: 'rules', label: 'Rules feed', group: 'Reference' },
 ];
 
+const KAGGLE_RULES_URL = 'https://www.kaggle.com/competitions/pokemon-tcg-ai-battle/rules';
+
+// Sidebar switch: use the official competition card data (from public/assets)
+// for names/metadata and card images, instead of the built-in illustrative set.
+function OfficialDataToggle() {
+  const off = useOfficial();
+  const status = off.error
+    ? off.error
+    : off.loading
+      ? 'loading…'
+      : off.ready
+        ? `${off.count} cards loaded`
+        : 'reads /public/assets';
+  return (
+    <div className="official-toggle">
+      <button
+        type="button"
+        className={`switch ${off.enabled ? 'on' : ''}`}
+        role="switch"
+        aria-checked={off.enabled}
+        onClick={off.toggle}
+        title="Use official competition card data + images from public/assets"
+      >
+        <span className="knob" />
+      </button>
+      <div className="official-meta">
+        <div className="official-title">Official card data</div>
+        <div className={`official-status ${off.enabled && off.error ? 'bad' : ''}`}>
+          {off.enabled ? status : 'off'}
+          {' · '}
+          <a href={KAGGLE_RULES_URL} target="_blank" rel="noreferrer">rules ↗</a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Shell() {
   const { user, ready, logout } = useAuth();
   const [tab, setTab] = useState('watch');
@@ -66,6 +104,7 @@ function Shell() {
           <div className="mark" />
           <div><b>TCG Arena</b><span>AI Training Lab</span></div>
         </div>
+        <OfficialDataToggle />
         {groups.map((g) => (
           <div key={g}>
             <div className="nav-label">{g}</div>
@@ -85,6 +124,7 @@ function Shell() {
           </div>
         )}
         <div className="spacer" />
+
         <div className="userbox">
           <div className="row between">
             <div className="who">

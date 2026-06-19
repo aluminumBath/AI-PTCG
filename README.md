@@ -247,7 +247,9 @@ backend release, so a deployed database automatically picks up new tables (and
 future column changes) without manual steps. The baseline revision is idempotent
 — it creates the full schema on a fresh database and adds only the missing tables
 (e.g. `favorites`, `matches`, `human_games`) on an established one, leaving
-existing data untouched.
+existing data untouched. A follow-up revision (`0002_official_cards`) adds the
+`official_cards` / `official_card_images` tables for the database-backed card
+data described above.
 
 Run it yourself against any `DATABASE_URL`:
 
@@ -424,34 +426,84 @@ agent that pilots it, then:
 > `card_id` column is auto-filled by matching on card name; otherwise it's left
 > blank with a note.
 
-### Official card data toggle (fixing card images)
+### Official card data toggle (using the provided competition data)
 
-The built-in card images are derived from illustrative card ids, so some are
-wrong. The competition ships authoritative **card data** (`EN Card Data.csv`,
-from the [Data page](https://www.kaggle.com/competitions/pokemon-tcg-ai-battle/data))
-and image assets. Drop them into `frontend/public/assets/` and flip the
-**Official card data** switch in the sidebar: the Card explorer and battle boards
-then use official names/metadata and images (matched to our cards by name).
+The built-in card images are derived from illustrative ids, so some are wrong.
+The competition instead ships authoritative data you place under
+`frontend/public/assets/`:
 
-Expected layout under `frontend/public/assets/`:
+- **`en_card_data.csv`** — the official card metadata (Card ID, Card Name,
+  Expansion, HP, Type, attacks…). 2022 rows = **1267 unique cards** (the CSV is
+  denormalized: one row per attack).
+- **`Card_ID List_EN.pdf`** — the card images, one card per page. Card images
+  aren't loose files in this PDF, so you extract them once:
 
+  ```bash
+  pip install pymupdf
+  python tools/extract_card_images.py \
+      --pdf "frontend/public/assets/Card_ID List_EN.pdf" \
+      --out frontend/public/assets/cards
+  ```
+
+  This reads the PDF's table-of-contents link annotations to map **Card ID →
+  page**, then writes `frontend/public/assets/cards/<CardID>.png` for all 1267
+  cards (matching the CSV's ids exactly).
+
+#### Recommended: load it into the database (no large files in the repo)
+
+Instead of shipping the CSV/PDF/images, load them **once** into the database —
+then the app serves official data from Postgres and the files can be deleted:
+
+```bash
+pip install pymupdf pandas
+# local sqlite:
+python tools/load_official_data.py \
+    --csv "frontend/public/assets/en_card_data.csv" \
+    --pdf "frontend/public/assets/Card_ID List_EN.pdf"
+
+# production Postgres (Neon) — point DATABASE_URL at your DB:
+DATABASE_URL="postgresql://…?sslmode=require" \
+python tools/load_official_data.py --csv en_card_data.csv --pdf "Card_ID List_EN.pdf"
 ```
-assets/EN Card Data.csv        # the competition card metadata (any of:
-                               #   EN Card Data.csv / en_card_data.csv / cards.csv)
-assets/images/<Card ID>.png    # card images (default path pattern)
-```
 
-The image path pattern is configurable in `frontend/public/config.js` if your
-assets are laid out differently — tokens `{id} {name} {expansion} {no}`:
+This fills two tables (created by the `0002_official_cards` migration, or
+auto-created by the loader): `official_cards` (1267 rows of metadata + attacks
+as JSON) and `official_card_images` (PNG bytes per Card ID). The backend serves
+them at `GET /api/official/cards`, `…/cards/{id}`, and `…/cards/{id}/image`, and
+the **Official card data** toggle uses the DB automatically (the sidebar status
+shows "from DB"). With the data in Postgres you can delete the CSV, the PDF, and
+`assets/cards/` — the app falls back to `public/assets` only when the DB has no
+official rows.
+
+Then flip the **Official card data** switch at the top of the sidebar. With it on:
+
+- the **Card explorer** browses the **official catalog** itself (all 1267 cards,
+  searchable by name/expansion), with official names, HP, type, and images;
+- the **battle boards**, **Decks**, and **Favorites** use official names/images
+  for any card whose name matches.
+
+The image path defaults to `assets/cards/{id}.png`; override it in
+`frontend/public/config.js` if you lay assets out differently (tokens
+`{id} {name} {expansion} {no}`):
 
 ```js
-window.__OFFICIAL_IMG__ = "assets/images/{id}.png";
+window.__OFFICIAL_IMG__ = "assets/cards/{id}.png";
 ```
 
-> **License.** Per the competition rules, the Pokémon card data and image assets
-> are licensed for competition use only — keep them local (they're git-ignored
-> under `public/assets/`) and delete them after the competition. The sidebar
-> toggle also links to the official rules.
+> **Heads-up — the EN PDF art is black-and-white.** Its text/frames are crisp
+> but the illustrations are 1-bit (confirmed: the embedded images contain no
+> colour). The extractor also accepts a colour PDF (e.g. a colour JP list) via
+> `--pdf` and yields colour images with the same mapping; pass `--render` if a
+> colour PDF needs page rasterization instead of raw image extraction.
+>
+> **Card pool.** The official data is a newer card universe (Mega-evolution sets
+> like PFL/ASC/MEG/SSP) than the engine's built-in archetypes, so the toggle is
+> a **display/browse** layer — it does not change which decks the engine plays.
+
+> **License.** Per the competition rules, the Pokémon card data and images are
+> licensed for competition use only — keep them local (the CSV, `assets/cards/`,
+> and `*.pdf` under `public/assets/` are git-ignored) and delete them after the
+> competition. The sidebar toggle links to the official rules.
 
 ---
 

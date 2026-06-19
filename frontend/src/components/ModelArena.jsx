@@ -111,6 +111,17 @@ export default function ModelArena({ models, decks }) {
   }
   useEffect(() => () => clearInterval(poll.current), []);
 
+  // Validation (CIs + sanity checks) auto-loads when a result is available.
+  const [val, setVal] = useState(null);
+  useEffect(() => {
+    if (status?.status === 'done' || status?.status === 'cancelled') {
+      api.tournamentValidate(job).then(setVal).catch(() => setVal(null));
+    } else {
+      setVal(null);
+    }
+  }, [job, status?.status]);
+  const ciFor = (agent) => val?.winrates?.[agent]?.overall || null;
+  const STATUS_DOT = { pass: 'var(--ok, #45c86b)', info: 'var(--muted)', warn: 'var(--warn, #e0a84e)' };
   const result = (status?.status === 'done' || status?.status === 'cancelled') ? status.result : null;
   const running = status?.status === 'running';
   const pct = status?.total ? Math.round((status.done / status.total) * 100) : 0;
@@ -245,11 +256,16 @@ export default function ModelArena({ models, decks }) {
                       <span className="chip-dot" style={{ background: FAMILY_COLOR[familyOf(r.agent)], display: 'inline-block', marginRight: 8 }} />
                       {labelOf(r.agent)}{i === 0 && <span className="pill" style={{ marginLeft: 8 }}>best</span>}
                     </td>
-                    <td style={{ minWidth: 160 }}>
+                    <td style={{ minWidth: 180 }}>
                       <div className="row" style={{ gap: 8 }}>
                         <div className="bar" style={{ flex: 1 }}><div className="bar-fill" style={{ width: `${r.winrate * 100}%`, background: FAMILY_COLOR[familyOf(r.agent)] }} /></div>
                         <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{(r.winrate * 100).toFixed(0)}%</span>
                       </div>
+                      {ciFor(r.agent) && (
+                        <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--faint)', marginTop: 3 }}>
+                          95% CI {Math.round(ciFor(r.agent).ci_lo * 100)}–{Math.round(ciFor(r.agent).ci_hi * 100)}% · ±{Math.round(ciFor(r.agent).ci_half * 100)}
+                        </div>
+                      )}
                     </td>
                     <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{r.wins} / {r.losses} / {r.draws}</td>
                     <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{r.avg_turns}</td>
@@ -287,7 +303,150 @@ export default function ModelArena({ models, decks }) {
               </table>
             </div>
           </div>
+
+          {val && (
+            <div className="panel pad" style={{ marginTop: 16 }}>
+              <div className="row between">
+                <b style={{ fontFamily: 'var(--display)' }}>Diagnostics — confidence &amp; sanity checks</b>
+                <span className="tag" style={{ background: STATUS_DOT[val.verdict], color: '#0a0e1f' }}>
+                  {val.verdict === 'pass' ? 'looks solid' : val.verdict === 'warn' ? 'needs care' : 'ok, with notes'}
+                </span>
+              </div>
+              <p className="sub" style={{ fontSize: 12, marginTop: 4 }}>
+                Win rates are estimates from a finite number of games; the 95% interval is the plausible range.
+                A wide interval means run more games before trusting the order.
+              </p>
+              <div style={{ marginTop: 10 }}>
+                {val.checks.map((c) => (
+                  <div key={c.id} className="rule">
+                    <div className="rule-name">
+                      <span style={{ color: STATUS_DOT[c.status] }}>{c.status === 'pass' ? '✓' : c.status === 'warn' ? '!' : 'ℹ'}</span>
+                      {c.label}
+                      <span className="tag" style={{ marginLeft: 8 }}>{c.status}</span>
+                    </div>
+                    <div className="rule-detail">{c.detail}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <ConsistencyPanel models={models} pickedDecks={pickedDecks} decks={decks}
+            defaultA={result.best} labelOf={labelOf} />
         </>
+      )}
+    </div>
+  );
+}
+
+// Repeated independent batches of one matchup -> mean ± standard deviation, with
+// a small per-batch bar chart. Runs as its own background job.
+function ConsistencyPanel({ models, pickedDecks, decks, defaultA, labelOf }) {
+  const list = models && models.length ? models : [{ id: 'heuristic', label: 'Heuristic' }, { id: 'random', label: 'Random' }];
+  const [a, setA] = useState(defaultA || list[0]?.id || 'heuristic');
+  const [b, setB] = useState('random');
+  const [batches, setBatches] = useState(5);
+  const [gpb, setGpb] = useState(20);
+  const [job, setJob] = useState(null);
+  const [status, setStatus] = useState(null);
+  const poll = useRef(null);
+
+  const usingDecks = (pickedDecks && pickedDecks.length ? pickedDecks : (decks || []).slice(0, 2));
+  const running = status?.status === 'running';
+  const res = status?.status === 'done' || status?.status === 'cancelled' ? status.result : null;
+
+  function startPolling(id) {
+    clearInterval(poll.current);
+    poll.current = setInterval(async () => {
+      try {
+        const s = await api.consistencyStatus(id);
+        setStatus(s);
+        if (s.status !== 'running') clearInterval(poll.current);
+      } catch { /* transient */ }
+    }, 800);
+  }
+  useEffect(() => () => clearInterval(poll.current), []);
+
+  async function run() {
+    setStatus({ status: 'running', done: 0, total: batches * gpb });
+    try {
+      const r = await api.consistencyRun({ agent_a: a, agent_b: b, decks: usingDecks, batches, games_per_batch: gpb });
+      setJob(r.job_id); startPolling(r.job_id);
+    } catch (e) { setStatus({ status: 'error', error: e.message }); }
+  }
+  async function stop() { if (job) { try { await api.cancelConsistency(job); } catch { /* ignore */ } } }
+
+  const rates = res ? res.per_batch.map((x) => x.winrate).filter((x) => x != null) : [];
+  const pct = status?.total ? Math.round((status.done / status.total) * 100) : 0;
+
+  return (
+    <div className="panel pad" style={{ marginTop: 16 }}>
+      <b style={{ fontFamily: 'var(--display)' }}>Consistency check (mean ± SD)</b>
+      <p className="sub" style={{ fontSize: 12, marginTop: 2 }}>
+        Replays one matchup over several independent seeded batches to see how much the win rate swings run-to-run.
+        {usingDecks.length ? ` Decks: ${usingDecks.join(', ')}.` : ''}
+      </p>
+      <div className="row" style={{ gap: 12, flexWrap: 'wrap', marginTop: 8, alignItems: 'flex-end' }}>
+        <label className="field">Model A
+          <select value={a} onChange={(e) => setA(e.target.value)}>
+            {list.map((m) => <option key={m.id} value={m.id}>{m.label || m.id}</option>)}
+          </select>
+        </label>
+        <label className="field">vs Model B
+          <select value={b} onChange={(e) => setB(e.target.value)}>
+            {list.map((m) => <option key={m.id} value={m.id}>{m.label || m.id}</option>)}
+          </select>
+        </label>
+        <label className="field">Batches
+          <input type="number" min="2" max="20" value={batches} onChange={(e) => setBatches(Math.max(2, Math.min(20, +e.target.value || 2)))} style={{ width: 80 }} />
+        </label>
+        <label className="field">Games / batch
+          <input type="number" min="2" max="50" value={gpb} onChange={(e) => setGpb(Math.max(2, Math.min(50, +e.target.value || 2)))} style={{ width: 90 }} />
+        </label>
+        <div className="grow" />
+        {running && <button className="btn danger sm" onClick={stop} style={{ alignSelf: 'end' }}>Stop</button>}
+        <button className="btn primary" onClick={run} disabled={running || a === b} style={{ alignSelf: 'end' }}>
+          {running ? <span className="spin" /> : 'Run consistency check'}
+        </button>
+      </div>
+      {a === b && <p className="sub" style={{ fontSize: 12, marginTop: 8 }}>Pick two different models.</p>}
+
+      {running && (
+        <div style={{ marginTop: 12 }}>
+          <div className="bar"><div className="bar-fill" style={{ width: `${pct}%` }} /></div>
+          <p className="sub" style={{ fontSize: 12, marginTop: 6 }}>Playing batches… {status.done}/{status.total} games.</p>
+        </div>
+      )}
+      {status?.status === 'error' && <div className="err" style={{ marginTop: 10 }}>{status.error}</div>}
+
+      {res && (
+        <div style={{ marginTop: 14 }}>
+          <div className="row" style={{ gap: 18, flexWrap: 'wrap', alignItems: 'baseline' }}>
+            <span style={{ fontFamily: 'var(--display)', fontSize: 18 }}>
+              {labelOf ? labelOf(res.agent_a) : res.agent_a}: {(res.mean * 100).toFixed(0)}%
+              <span style={{ color: 'var(--muted)', fontSize: 13 }}> mean</span>
+              <span style={{ color: 'var(--accent)', fontSize: 15 }}> ± {(res.std * 100).toFixed(0)}%</span>
+              <span style={{ color: 'var(--muted)', fontSize: 13 }}> SD</span>
+            </span>
+            <span className="tag">pooled {(res.pooled_winrate * 100).toFixed(0)}% · 95% CI {Math.round(res.ci_lo * 100)}–{Math.round(res.ci_hi * 100)}%</span>
+            <span className="tag">{res.decided} decided</span>
+          </div>
+          <p className="sub" style={{ fontSize: 12, marginTop: 6 }}>{res.note} <span style={{ color: 'var(--faint)' }}>(vs {labelOf ? labelOf(res.agent_b) : res.agent_b})</span></p>
+
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 120, marginTop: 12,
+            padding: '0 4px', borderBottom: '1px solid var(--line)', position: 'relative' }}>
+            {/* mean line */}
+            <div style={{ position: 'absolute', left: 0, right: 0, bottom: `${res.mean * 100}%`, borderTop: '1px dashed var(--accent)' }} />
+            {rates.map((wr, i) => (
+              <div key={i} title={`Batch ${i + 1}: ${(wr * 100).toFixed(0)}%`}
+                style={{ flex: 1, height: `${Math.max(2, wr * 100)}%`, background: 'var(--accent-soft)',
+                  borderTop: '2px solid var(--accent)', borderRadius: '3px 3px 0 0' }} />
+            ))}
+          </div>
+          <div className="row between" style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--faint)', marginTop: 4 }}>
+            <span>batch 1</span><span>per-batch win rate · dashed = mean</span><span>batch {rates.length}</span>
+          </div>
+        </div>
       )}
     </div>
   );

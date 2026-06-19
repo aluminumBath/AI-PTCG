@@ -29,12 +29,12 @@ const CSV_CANDIDATES = [
   'assets/card_data.csv',
 ];
 const IMG_PATTERN =
-  (typeof window !== 'undefined' && window.__OFFICIAL_IMG__) || 'assets/images/{id}.png';
+  (typeof window !== 'undefined' && window.__OFFICIAL_IMG__) || 'assets/cards/{id}.png';
 
 let _enabled = false;
 try { _enabled = localStorage.getItem(KEY) === '1'; } catch { /* no storage */ }
 
-let _state = { ready: false, loading: false, error: null, byName: new Map(), count: 0, source: null };
+let _state = { ready: false, loading: false, error: null, byName: new Map(), byId: new Map(), catalog: [], count: 0, source: null };
 const subs = new Set();
 const notify = () => subs.forEach((fn) => { try { fn(); } catch { /* ignore */ } });
 
@@ -65,7 +65,7 @@ function parseCSV(text) {
 }
 
 function buildMaps(rows) {
-  if (!rows.length) return { byName: new Map(), count: 0 };
+  if (!rows.length) return { byName: new Map(), byId: new Map(), catalog: [], count: 0 };
   const header = rows[0].map((h) => norm(h));
   const idx = (names) => { for (const n of names) { const k = header.indexOf(n); if (k >= 0) return k; } return -1; };
   const ci = {
@@ -73,26 +73,30 @@ function buildMaps(rows) {
     name: idx(['card name', 'card_name', 'name']),
     exp: idx(['expansion', 'set']),
     no: idx(['collection no.', 'collection no', 'collection_no', 'number', 'no']),
-    stage: idx(['stage (pokémon) / type (energy and trainer)', 'stage', 'type']),
+    stage: idx(['stage (pokémon)/type (energy and trainer)', 'stage (pokémon) / type (energy and trainer)', 'stage', 'type']),
     cat: idx(['category']),
-    rule: idx(['rule']),
     hp: idx(['hp']),
+    type: idx(['type']),
     image: idx(['image', 'image url', 'image_url', 'img']),
   };
   const get = (row, k) => (k >= 0 && row[k] != null ? String(row[k]).trim() : '');
-  const byName = new Map();
+  const byId = new Map();    // Card ID -> meta (first row wins; CSV repeats IDs per move)
+  const byName = new Map();  // normalized name -> meta (first match)
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r];
     if (!row || (row.length === 1 && !row[0])) continue;
     const name = get(row, ci.name);
     if (!name) continue;
-    byName.set(norm(name), {
-      id: get(row, ci.id), name, expansion: get(row, ci.exp), no: get(row, ci.no),
-      stage: get(row, ci.stage), category: get(row, ci.cat), rule: get(row, ci.rule),
-      hp: get(row, ci.hp), image: get(row, ci.image),
-    });
+    const id = get(row, ci.id);
+    const meta = {
+      id, name, expansion: get(row, ci.exp), no: get(row, ci.no),
+      stage: get(row, ci.stage), category: get(row, ci.cat),
+      hp: get(row, ci.hp), type: get(row, ci.type), image: get(row, ci.image),
+    };
+    if (id && !byId.has(id)) byId.set(id, meta);
+    if (!byName.has(norm(name))) byName.set(norm(name), meta);
   }
-  return { byName, count: byName.size };
+  return { byName, byId, catalog: [...byId.values()], count: byId.size };
 }
 
 export async function loadOfficialData(force = false) {
@@ -112,9 +116,9 @@ export async function loadOfficialData(force = false) {
       error: 'No card CSV found in public/assets (expected e.g. "EN Card Data.csv").' };
     notify(); return _state;
   }
-  const { byName, count } = buildMaps(parseCSV(text));
+  const { byName, byId, catalog, count } = buildMaps(parseCSV(text));
   _state = {
-    ready: true, loading: false, byName, count, source: used,
+    ready: true, loading: false, byName, byId, catalog, count, source: used,
     error: count ? null : 'CSV loaded but no rows matched the expected columns.',
   };
   notify(); return _state;
@@ -144,13 +148,37 @@ export function officialMetaFor(card) {
     || null;
 }
 
-export function officialImageFor(card) {
-  const meta = officialMetaFor(card);
+function imageForMeta(meta) {
   if (!meta) return null;
   if (meta.image) return /^https?:\/\//.test(meta.image) ? meta.image : ASSET(meta.image);
   if (meta.id) return ASSET(fillPattern(IMG_PATTERN, meta));
   return null;
 }
+
+export function officialImageFor(card) {
+  return imageForMeta(officialMetaFor(card));
+}
+
+// Browse the official catalog (used by the Card explorer when the toggle is on).
+// Returns entries shaped like our card rows: {id,name,set,supertype,hp,type,image}.
+export function searchOfficial(query, limit = 80) {
+  if (!_state.ready) return [];
+  const q = norm(query);
+  const out = [];
+  for (const m of _state.catalog) {
+    if (!q || norm(m.name).includes(q) || norm(m.expansion).includes(q) || String(m.id) === q) {
+      out.push({
+        id: m.id, name: m.name, set: m.expansion,
+        supertype: m.category || m.stage, hp: m.hp, type: m.type,
+        image: imageForMeta(m), official: true,
+      });
+      if (out.length >= limit) break;
+    }
+  }
+  return out;
+}
+
+export function officialCount() { return _state.count; }
 
 // React hook: re-renders the consumer when the toggle flips or data loads.
 export function useOfficial() {

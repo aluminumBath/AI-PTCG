@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -179,3 +179,33 @@ class MatchRecord(Base):
     captured: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class OfficialCard(Base):
+    """Official competition card metadata (loaded from en_card_data.csv).
+
+    One row per unique Card ID; the source CSV is denormalized by attack, so the
+    loader aggregates a card's attacks into ``moves`` (JSON)."""
+    __tablename__ = "official_cards"
+
+    card_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), index=True)
+    expansion: Mapped[str] = mapped_column(String(32), default="")
+    collection_no: Mapped[str] = mapped_column(String(32), default="")
+    stage: Mapped[str] = mapped_column(String(64), default="")
+    category: Mapped[str] = mapped_column(String(64), default="")
+    hp: Mapped[str] = mapped_column(String(16), default="")
+    type: Mapped[str] = mapped_column(String(32), default="")
+    weakness: Mapped[str] = mapped_column(String(32), default="")
+    resistance: Mapped[str] = mapped_column(String(32), default="")
+    retreat: Mapped[str] = mapped_column(String(16), default="")
+    moves: Mapped[str] = mapped_column(Text, default="")          # JSON: [{name,cost,damage,effect}]
+
+
+class OfficialCardImage(Base):
+    """Card image bytes (extracted from the Card ID List PDF), keyed by Card ID."""
+    __tablename__ = "official_card_images"
+
+    card_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mime: Mapped[str] = mapped_column(String(32), default="image/png")
+    data: Mapped[bytes] = mapped_column(LargeBinary)
