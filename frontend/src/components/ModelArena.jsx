@@ -212,6 +212,11 @@ export default function ModelArena({ models, decks }) {
               <Board player={status.current.state.players[1]} activeTurn={status.current.state.current_player === 1} flip />
               <Board player={status.current.state.players[0]} activeTurn={status.current.state.current_player === 0} />
             </div>
+            {status.current.rationale && (
+              <div className="panel pad" style={{ marginTop: 10, fontSize: 12.5 }}>
+                <b>{labelOf(status.current.mover_agent) || 'Move'}:</b> {status.current.rationale}
+              </div>
+            )}
             <div className="log" style={{ marginTop: 10, maxHeight: 170 }}>
               {(status.current.state.log || []).slice().reverse().map((l, i) => {
                 const m = l.match(/^(T\d+:)\s*(.*)$/);

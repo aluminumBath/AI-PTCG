@@ -42,13 +42,14 @@ def _ordered(actions: list[Action]) -> list[Action]:
     return sorted(actions, key=lambda a: _PRIORITY.get(a.type, 50))
 
 
-def find_lethal(engine: GameEngine, me: int, max_depth: int = 4,
-                budget: int = 2000) -> Optional[list[Action]]:
+def find_lethal(engine: GameEngine, me: int, max_depth: int = 3,
+                budget: int = 600, trials: int = 3) -> Optional[list[Action]]:
     """Return a sequence of actions that wins for ``me`` *this turn*, or None.
 
     ``max_depth`` bounds the line length (development steps + the final attack);
     ``budget`` caps the number of simulated actions so the search stays inside a
-    per-turn time budget.
+    per-turn time budget; ``trials`` is how many RNG seeds a candidate must win
+    under to be trusted.
     """
     counter = [budget]
 
@@ -76,7 +77,7 @@ def find_lethal(engine: GameEngine, me: int, max_depth: int = 4,
         return None
 
     line = dfs(engine, max_depth)
-    if line and _verify(engine, me, line):
+    if line and _verify(engine, me, line, trials):
         return line
     return None
 
@@ -101,21 +102,59 @@ def _verify(engine: GameEngine, me: int, line: list[Action], trials: int = 4) ->
     return True
 
 
+def lethal_plausible(engine: GameEngine, me: int) -> bool:
+    """Cheap, *sound* pre-check: can ``me`` possibly win on this turn at all?
+
+    A turn ends the moment you attack, so you get at most one attack. With only
+    plain single-target damage you can KO one Pokémon (worth ≤3 prizes). Winning
+    therefore requires one of:
+      * the opponent down to a single Pokémon (one KO removes their last), or
+      * three or fewer of your own prizes left (one big KO can finish), or
+      * an effect attack / activated ability in play (which could spread, take
+        extra prizes, or KO multiple — so a multi-prize turn is conceivable).
+    When none hold, no lethal exists and we can skip the search entirely. This
+    makes the Closer nearly free on the early/setup turns that dominate a game.
+    """
+    s = engine.state
+    mine, opp = s.players[me], s.players[1 - me]
+    opp_count = (1 if opp.active else 0) + len(opp.bench)
+    if opp_count <= 1:
+        return True
+    if len(mine.prizes) <= 3:
+        return True
+    for poke in mine.all_pokemon():
+        if any(getattr(atk, "effect_id", None) for atk in poke.card.attacks):
+            return True
+        if any(getattr(ab, "kind", None) == "activated" for ab in poke.card.abilities):
+            return True
+    return False
+
+
 class ClosingAgent(Agent):
-    """Wrap ``base`` with a guaranteed-lethal check each turn."""
+    """Wrap ``base`` with a guaranteed-lethal check each turn.
+
+    Defaults are tuned for tournament scale: a bounded depth-3 / 600-action
+    search (covers attack-now and the common gust/attach → attack lines), gated
+    by :func:`lethal_plausible` so most turns cost nothing. Raise ``max_depth`` /
+    ``budget`` for deeper single-game analysis.
+    """
 
     name = "closer"
 
-    def __init__(self, base: Optional[Agent] = None, max_depth: int = 4,
-                 budget: int = 2000, rng: Optional[random.Random] = None):
+    def __init__(self, base: Optional[Agent] = None, max_depth: int = 3,
+                 budget: int = 600, trials: int = 3,
+                 rng: Optional[random.Random] = None):
         self.base = base or HeuristicAgent(rng)
         self.max_depth = max_depth
         self.budget = budget
+        self.trials = trials
         self.last_explanation = ""
 
     def select(self, engine: GameEngine) -> Action:
         me = engine.state.current_player
-        line = find_lethal(engine, me, self.max_depth, self.budget)
+        line = None
+        if lethal_plausible(engine, me):
+            line = find_lethal(engine, me, self.max_depth, self.budget, self.trials)
         if line:
             steps = " → ".join(a.type.value for a in line)
             self.last_explanation = (

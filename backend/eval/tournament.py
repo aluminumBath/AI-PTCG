@@ -18,22 +18,25 @@ from agents.registry import make_agent
 
 def play_match(agent_a: Agent, agent_b: Agent, deck_a, deck_b,
                seed: int, max_turns: int = 200, max_steps: int = 20000,
-               on_move: Optional[Callable[[GameEngine], None]] = None):
+               on_move: Optional[Callable[..., None]] = None):
     """Play one game. Returns (winner_seat | None, turns).
 
-    If ``on_move`` is given it's called with the engine after the initial setup
-    and after every applied action, so a caller can stream the live board.
+    If ``on_move`` is given it's called as ``on_move(engine, mover_seat,
+    rationale)`` after the initial setup (mover_seat=None) and after every applied
+    action, so a caller can stream the live board and the acting agent's reason.
     """
     eng = GameEngine.new_game(deck_a, deck_b, seed=seed)
     agents = [agent_a, agent_b]
     steps = 0
     if on_move:
-        on_move(eng)
+        on_move(eng, None, "")
     while not eng.state.is_over() and eng.state.turn_number <= max_turns and steps < max_steps:
-        eng.apply(agents[eng.state.current_player].select(eng))
+        seat = eng.state.current_player
+        agent = agents[seat]
+        eng.apply(agent.select(eng))
         steps += 1
         if on_move:
-            on_move(eng)
+            on_move(eng, seat, getattr(agent, "last_explanation", "") or "")
     return eng.state.winner, eng.state.turn_number
 
 
@@ -84,14 +87,19 @@ def run_tournament(
                 last = [0.0]  # wall-clock of the last emitted snapshot (throttle)
                 game_no = done + 1
 
-                def on_move(eng, _seat0=seat0, _seat1=seat1, _d0=d0, _d1=d1,
-                            _last=last, _game_no=game_no):
+                def on_move(eng, mover_seat=None, rationale="", _seat0=seat0, _seat1=seat1,
+                            _d0=d0, _d1=d1, _last=last, _game_no=game_no):
                     now = _time.time()
                     over = eng.state.is_over()
                     if not over and now - _last[0] < 0.12:
                         return  # cap update rate; always emit the final frame
                     _last[0] = now
                     st = eng.state.to_dict(viewer=None)  # full spectator view
+                    mover_agent = None
+                    if mover_seat == 0:
+                        mover_agent = _seat0
+                    elif mover_seat == 1:
+                        mover_agent = _seat1
                     on_state({
                         "game_no": _game_no, "total_games": total,
                         "seat0_agent": _seat0, "seat1_agent": _seat1,
@@ -99,6 +107,7 @@ def run_tournament(
                         "turn": st.get("turn_number"),
                         "current_player": st.get("current_player"),
                         "over": over, "winner": st.get("winner"),
+                        "mover_agent": mover_agent, "rationale": rationale,
                         "state": st,
                     })
 
