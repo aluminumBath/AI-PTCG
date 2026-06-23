@@ -27,8 +27,7 @@ def static_eval(engine: GameEngine, me: int) -> float:
     mine = s.players[me]
     opp = s.players[1 - me]
     # Prizes are the win condition — weight them heavily (fewer remaining = good).
-    score = (opp.prizes_taken - mine.prizes_taken) * 0  # placeholder, use remaining
-    score += (6 - len(mine.prizes)) * 100        # prizes I've taken
+    score = (6 - len(mine.prizes)) * 100         # prizes I've taken
     score -= (6 - len(opp.prizes)) * 100          # prizes opponent has taken
     # Board presence
     for p, sign in ((mine, 1), (opp, -1)):

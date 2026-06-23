@@ -18,6 +18,7 @@
 // Note: per the competition rules, the Pokémon data/images are licensed for
 // competition use only — keep them local and delete after the competition.
 import { useEffect, useState } from 'react';
+import { api } from './api';
 
 const KEY = 'tcg.officialData';
 const ASSET = (p) => `${import.meta.env.BASE_URL}${String(p).replace(/^\/+/, '')}`;
@@ -104,6 +105,31 @@ export async function loadOfficialData(force = false) {
   if (_state.loading) return _state;
   _state = { ..._state, loading: true, error: null }; notify();
 
+  // 1) Primary source: the database (loaded via tools/load_official_data.py).
+  try {
+    const res = await fetch(`${api.base}/api/official/cards?limit=8000`, { cache: 'no-store' });
+    if (res.ok) {
+      const cards = (await res.json()).cards || [];
+      if (cards.length) {
+        const byId = new Map(), byName = new Map(), catalog = [];
+        for (const c of cards) {
+          const meta = {
+            id: String(c.card_id), name: c.name, expansion: c.expansion || '',
+            no: c.collection_no || '', stage: c.stage || '', category: c.category || '',
+            hp: c.hp || '', type: c.type || '', image: '', _api: c.has_image !== false,
+          };
+          byId.set(meta.id, meta);
+          if (!byName.has(norm(c.name))) byName.set(norm(c.name), meta);
+          catalog.push(meta);
+        }
+        _state = { ready: true, loading: false, byName, byId, catalog, count: catalog.length,
+          source: 'database', error: null };
+        notify(); return _state;
+      }
+    }
+  } catch { /* DB not reachable / not loaded — fall back to files */ }
+
+  // 2) Fallback: the CSV in public/assets.
   let text = null, used = null;
   for (const cand of CSV_CANDIDATES) {
     try {
@@ -113,7 +139,7 @@ export async function loadOfficialData(force = false) {
   }
   if (text == null) {
     _state = { ...(_state), loading: false, ready: false,
-      error: 'No card CSV found in public/assets (expected e.g. "EN Card Data.csv").' };
+      error: 'No official data found — load it into the DB (tools/load_official_data.py) or place en_card_data.csv in public/assets.' };
     notify(); return _state;
   }
   const { byName, byId, catalog, count } = buildMaps(parseCSV(text));
@@ -150,6 +176,7 @@ export function officialMetaFor(card) {
 
 function imageForMeta(meta) {
   if (!meta) return null;
+  if (meta._api && meta.id) return `${api.base}/api/official/cards/${meta.id}/image`;
   if (meta.image) return /^https?:\/\//.test(meta.image) ? meta.image : ASSET(meta.image);
   if (meta.id) return ASSET(fillPattern(IMG_PATTERN, meta));
   return null;

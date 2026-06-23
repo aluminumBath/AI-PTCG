@@ -5,6 +5,7 @@ __pycache__/
 backend/tcg_dev.db
 backend/.card_cache/
 backend/checkpoints/policy_snapshot_*.pt
+backend/checkpoints/policy_az_*.pt
 
 # Node / Vite
 node_modules/
@@ -15,5 +16,11 @@ frontend/.env
 .DS_Store
 *.swp
 
-Card_ID List_JP.pdf
-Card_ID List_EN_orig.pdf
+# Official competition card data + images (licensed for competition use only —
+# keep local, do not commit/distribute). The generated pokeball + config stay.
+frontend/public/assets/*.csv
+frontend/public/assets/images/
+frontend/public/assets/cards/
+frontend/public/assets/*.pdf
+backend/data_store/EN Card Data.csv
+backend/data_store/*Card Data*.csv

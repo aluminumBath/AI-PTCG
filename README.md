@@ -7,17 +7,23 @@ rules-faithful environment — plus a polished web app to **watch** agents duel,
 - **Rules engine** — a faithful Standard-format engine: evolution lines, energy
   attachment, abilities, trainers, retreat, status conditions, weakness/
   resistance, prizes (incl. multi-prize `ex` Pokémon), and all win conditions.
-- **Fifteen model types** — `random`, `heuristic`, and three alternative
+- **Nineteen model types** — `random`, `heuristic`, and three alternative
   heuristic *strategies* (`aggro`, `control`, `setup`); the search family
   `greedy`, `minimax`, `mcts`, `flat_mc`, and `ismcts` (Information-Set MCTS for
   **imperfect information**); the learned `rl` (PPO self-play net) and hybrid
-  `rl_mcts`; and three **ensemble / meta** agents that combine the others:
+  `rl_mcts`; three **ensemble / meta** agents that combine the others —
   `council` (every model casts a weighted vote), `prime` (a vote of only the
   strongest models — learned + search + hidden-info + rule-based — guarded by a
   Minimax safety veto), and `meta_top3` (a **dynamic** vote among the current
-  top-3 models on the scoreboard, re-resolved whenever the leaderboard changes).
-  Spanning baseline, rule-based, search, learned, hybrid, and ensemble families;
-  each documented in the **Model scores** explainer modal.
+  top-3 models on the scoreboard, re-resolved whenever the leaderboard changes);
+  and four **distinctive** agents: `closer` (a composable, RNG-verified
+  never-miss-lethal solver), `momentum` (risk modulation by the prize race —
+  swingy when behind, safe when ahead), `mindreader` (infers the opponent's
+  archetype from public play and switches to the matchup counter), and `coach`
+  (LLM-advised with a natural-language rationale, falling back to the heuristic
+  offline). Spanning baseline, rule-based, search, learned, hybrid, ensemble, and
+  adaptive families; each documented in the **Model scores** explainer modal, and
+  the acting agent's rationale is shown live in Watch mode.
 - **Model arena** — run a round-robin between any models across your decks and
   rank them by win rate, with a head-to-head matrix, to find the best opponent.
   Tournaments (and ladder episode runs) execute **server-side as background
@@ -182,6 +188,64 @@ starts, so self-play refines a policy that already plays human-like winning
 lines. It's skipped automatically if the dataset has fewer than 10 usable
 decisions.
 
+### AlphaZero self-play (visit-count policy targets)
+
+For a stronger net, `rl/alphazero_train.py` closes the AlphaZero loop: it
+generates games with the **same PUCT search the agent uses**, records the
+search's **visit-count distribution** as the policy target (π = N/ΣN) and the
+game outcome as the value target, and trains the net to match both — so a better
+net yields a stronger search yields better targets. It warm-starts from the
+existing checkpoint and writes the same `policy_latest.pt` + `metrics.json`
+(continuing the dashboard curve), so the `rl`, `rl_mcts`, and `alphazero` agents
+all pick it up.
+
+```bash
+cd backend
+# quick smoke (CPU): proves the loop runs and losses fall
+python -m rl.alphazero_train --iters 2 --games 4 --sims 32
+
+# a real run (Apple-Silicon GPU; hours). --eval-games reports winrate vs the heuristic each iter
+python -m rl.alphazero_train --iters 40 --games 30 --sims 160 --device mps \
+    --temp-moves 12 --dirichlet 0.25 --eval-games 20
+```
+
+| flag | meaning |
+|------|---------|
+| `--iters` / `--games` | training iterations × self-play games per iteration |
+| `--sims` | PUCT simulations per move (search strength of the data) |
+| `--device` | `auto` \| `cpu` \| `mps` \| `cuda` |
+| `--temp-moves` / `--dirichlet` | exploration: sample ∝ visits for N moves; root noise |
+| `--eval-games` | games vs the heuristic to report each iteration (yardstick) |
+| `--out` / `--warm-start` / `--scratch` | checkpoint to write / resume from / ignore |
+| `--resume` | continue toward `--iters` using `<out_dir>/az_run.json` (LR + exploration anneal across the run) |
+| `--league` + `--league-add-every` / `--league-size` / `--opponent-sims` / `--league-ismcts` | train against an exploiter population (below) |
+
+**Resumable long runs.** `--resume` reads a run-state sidecar so re-invoking the
+same command picks up where it left off (toward the target `--iters`), with a
+cosine LR decay and annealing exploration across the whole run. Kill it and
+re-run any time:
+
+```bash
+python -m rl.alphazero_train --iters 200 --games 30 --sims 160 --device mps --resume
+```
+
+**League / exploiters (AlphaStar-style).** With `--league` the learner stops
+playing only mirror self-play and instead faces a pool of frozen opponents — the
+heuristic, optional ISMCTS, and periodic snapshots of itself — sampled with
+**priority toward opponents that beat it**. Only the learner's moves are recorded,
+so policy targets stay clean while the data covers tougher, more varied play:
+
+```bash
+python -m rl.alphazero_train --iters 200 --games 30 --sims 160 --device mps \
+    --league --league-add-every 10 --league-size 6 --eval-games 20 --resume
+```
+
+> On CPU this only validates the pipeline (the bundled checkpoint is lightly
+> trained, so AlphaZero is only as strong as it). Real strength comes from the
+> longer run above on a GPU/Apple-Silicon box; see
+> [`SELF_HOSTING.md`](SELF_HOSTING.md). These trainers are **offline tools, not
+> part of any submission** — see [`COMPLIANCE.md`](COMPLIANCE.md).
+
 
 **Expectations (honest):** on CPU this is slow but real. The policy starts
 below random, passes random within tens of updates, and reaches parity with the
@@ -196,12 +260,42 @@ Watch progress live in the **Training lab** tab, or:
 cat backend/checkpoints/metrics.json
 ```
 
+### Evaluating the *deployed* policy + the health dots
+
+The Training lab shows two health dots at a glance:
+
+- **Opponent model** — green once the neural opponent model's *held-out*
+  separation Δ(P(in-hand) − P(other)) ≥ 0.10. The bundled model is green
+  (Δ≈0.13).
+- **Policy** — green once the **deployed** agent (AlphaZero = PUCT search + the
+  never-miss-lethal Closer, *not* the raw net) beats the heuristic ≥ 50%.
+
+The raw PPO win-rate understates what ships, so measure the deployed agent with:
+```bash
+cd backend
+# accumulate a fair sample at the real deployment sim count (chain with --append)
+python -m rl.eval_policy --agent alphazero --sims 300 --games 40 --append
+```
+This writes `checkpoints/policy_eval.json`, which the **Policy** dot reads
+directly — so a genuine ≥ 50% result flips it green automatically. Equivalently,
+the long `alphazero_train … --eval-games 20` run records its AlphaZero-vs-heuristic
+win-rate into `metrics.json`, which the dot uses as a fallback. On CPU a 300-sim
+game exceeds a few minutes, so run the eval (and the long training) on a
+GPU/Apple-Silicon box; the dot greens on its own when the number lands.
+
+
 ---
 
 ## Deploy to Render + Neon
 
 The blueprint deploys a **backend** (Docker web service) and a **frontend**
 (static site). The database is **Neon** (serverless Postgres).
+
+> **Self-hosting instead?** To run the whole app from a Mac behind a Cloudflare
+> Tunnel (keeping Neon as the database), see [`SELF_HOSTING.md`](SELF_HOSTING.md)
+> — the backend can serve the built frontend itself (`SERVE_FRONTEND=1`) so it
+> sits behind a single tunnel with no CORS, and that guide also covers the
+> heavier-duty agents self-hosting makes practical.
 
 ### 1. Create the Neon database
 1. Sign up at https://neon.com and create a project (e.g. `tcg`).

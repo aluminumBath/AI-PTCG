@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { Star } from '../favorites';
+import { officialImageFor, useOfficial } from '../officialData';
 
 const TYPE_COLOR = {
   Fire: 'var(--fire)', Water: 'var(--water)', Grass: 'var(--grass)',
@@ -9,6 +10,7 @@ const TYPE_COLOR = {
 };
 
 export default function Decks() {
+  useOfficial();  // re-render when the official-data toggle flips / loads
   const [meta, setMeta] = useState([]);
   const [sets, setSets] = useState([]);
 
@@ -40,11 +42,13 @@ export default function Decks() {
       )}
 
       <div className="deck-grid">
-        {meta.map((d) => (
+        {meta.map((d) => {
+          const thumb = officialImageFor({ name: d.key_cards?.[0] }) || d.image;
+          return (
           <div className="panel pad deck-card" key={d.id}>
             <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
-              {d.image && (
-                <img className="deck-thumb" src={d.image} alt={d.id}
+              {thumb && (
+                <img className="deck-thumb" src={thumb} alt={d.id}
                   onError={(e) => { e.currentTarget.style.display = 'none'; }} />
               )}
               <div style={{ flex: 1 }}>
@@ -66,7 +70,8 @@ export default function Decks() {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

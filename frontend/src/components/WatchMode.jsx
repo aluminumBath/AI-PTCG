@@ -31,6 +31,47 @@ function EventLog({ lines, live }) {
   );
 }
 
+function HandChips({ cards }) {
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div className="sub" style={{ fontSize: 11, marginBottom: 4 }}>Likely in hand (neural model):</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {cards.map((c) => (
+          <span key={c.name} className="tag" style={{ fontSize: 11 }}>{c.name} · {Math.round((c.prob || 0) * 100)}%</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReadBars({ read, title }) {
+  if (!read || !read.revealed) return null;
+  return (
+    <div className="panel pad" style={{ marginBottom: 14, fontSize: 13, flex: 1 }}>
+      <div className="row between">
+        <b style={{ fontFamily: 'var(--display)' }}>{title}</b>
+        <span className="sub">{read.style} · {Math.round((read.confidence || 0) * 100)}% top</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+        {read.top.map((t) => {
+          const pct = Math.round((t.prob || 0) * 100);
+          return (
+            <div key={t.deck_id} className="row" style={{ gap: 8, alignItems: 'center' }}>
+              <span style={{ width: 118, fontSize: 12 }}>{t.deck_id.replace(/_/g, ' ')}</span>
+              <div style={{ flex: 1, background: 'var(--panel-2, #1c1c22)', borderRadius: 5, height: 12, overflow: 'hidden' }}>
+                <div style={{ width: `${pct}%`, height: '100%', background: 'var(--psychic, #b07bd4)' }} />
+              </div>
+              <span style={{ width: 38, textAlign: 'right', fontSize: 11, color: 'var(--muted)' }}>{pct}%</span>
+            </div>
+          );
+        })}
+      </div>
+      {read.hand_read && read.hand_read.length > 0 && <HandChips cards={read.hand_read} />}
+      <p className="sub" style={{ marginTop: 6, fontSize: 11 }}>Inferred from the public cards the opponent has revealed.</p>
+    </div>
+  );
+}
+
 export default function WatchMode({ decks, agents, initialDeck, launchKey }) {
   const { user } = useAuth();
   const { favs } = useFavorites();
@@ -43,12 +84,16 @@ export default function WatchMode({ decks, agents, initialDeck, launchKey }) {
   const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [move, setMove] = useState(null);
+  const [readView, setReadView] = useState('mover');
+  const [readAcc, setReadAcc] = useState({ sum: 0, n: 0, last: null });
   const timer = useRef(null);
 
   const done = state?.winner != null || state?.phase === 'game_over';
 
   async function start() {
-    setPlaying(false); setSaved(false);
+    setPlaying(false); setSaved(false); setMove(null);
+    setReadAcc({ sum: 0, n: 0, last: null });
     const g = await api.newGame({ mode: 'ai_vs_ai', ...cfg });
     setGame(g.game_id); setState(g.state);
   }
@@ -57,6 +102,9 @@ export default function WatchMode({ decks, agents, initialDeck, launchKey }) {
     if (!game) return;
     const r = await api.step(game);
     setState(r.state);
+    setMove({ action: r.last_action, rationale: r.rationale, read: r.opponent_read, reads: r.reads });
+    const ev = r.opponent_read?.read_eval;
+    if (ev) setReadAcc((s) => ({ sum: s.sum + ev.precision_at_hand, n: s.n + 1, last: ev }));
     return r.done;
   }
 
@@ -141,6 +189,41 @@ export default function WatchMode({ decks, agents, initialDeck, launchKey }) {
                 <button className="btn sm" disabled={saved} onClick={async () => { await api.saveGame(game); setSaved(true); }}>
                   {saved ? 'Saved ✓' : 'Save to history'}
                 </button>
+              )}
+            </div>
+          )}
+
+          {move && (move.rationale || move.action) && (
+            <div className="panel pad" style={{ marginBottom: 14, fontSize: 13 }}>
+              {move.rationale
+                ? <span><b>Why:</b> {move.rationale}</span>
+                : <span className="sub mono">{move.action}</span>}
+            </div>
+          )}
+
+          {move && (move.read?.revealed > 0 || move.reads?.['0']?.revealed > 0 || move.reads?.['1']?.revealed > 0) && (
+            <div style={{ marginBottom: 14 }}>
+              <div className="row between" style={{ marginBottom: 6 }}>
+                <span className="sub" style={{ fontSize: 12 }}>Opponent read</span>
+                <div className="row" style={{ gap: 6 }}>
+                  <button className="btn sm" style={{ opacity: readView === 'mover' ? 1 : 0.5 }} onClick={() => setReadView('mover')}>mover</button>
+                  <button className="btn sm" style={{ opacity: readView === 'both' ? 1 : 0.5 }} onClick={() => setReadView('both')}>both</button>
+                </div>
+              </div>
+              {readView === 'mover'
+                ? <ReadBars read={move.read} title={`Read of opponent${move.read?.agent ? ' · ' + move.read.agent : ''}`} />
+                : (
+                  <div className="row" style={{ gap: 12, alignItems: 'stretch' }}>
+                    <ReadBars read={move.reads?.['0']} title={`${cfg.agent_a} → opp`} />
+                    <ReadBars read={move.reads?.['1']} title={`${cfg.agent_b} → opp`} />
+                  </div>
+                )}
+              {readView === 'mover' && readAcc.last && (
+                <div className="sub" style={{ fontSize: 11, marginTop: -4 }}>
+                  Read accuracy — this move {readAcc.last.hits}/{readAcc.last.hand_size} hand cards in top guesses;
+                  avg precision {Math.round((100 * readAcc.sum) / readAcc.n)}% over {readAcc.n} moves ·
+                  P(in-hand) {readAcc.last.p_in} vs P(other) {readAcc.last.p_out}
+                </div>
               )}
             </div>
           )}

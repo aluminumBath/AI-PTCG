@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useFavorites, Star, cardMeta } from '../favorites';
+import { officialImageFor, officialMetaFor, useOfficial } from '../officialData';
 
 const TYPE_VAR = {
   Fire: 'var(--fire)', Water: 'var(--water)', Grass: 'var(--grass)',
@@ -10,6 +11,7 @@ const TYPE_VAR = {
 
 export default function Favorites({ onLaunch }) {
   const { favs } = useFavorites();
+  useOfficial();  // re-render when the official-data toggle flips / loads
   const [deckMeta, setDeckMeta] = useState([]);
   const [sets, setSets] = useState([]);
 
@@ -18,9 +20,20 @@ export default function Favorites({ onLaunch }) {
     api.sets().then((r) => setSets(r.sets || [])).catch(() => {});
   }, []);
 
-  const favDecks = (favs.decks || []).map((id) => deckMeta.find((d) => d.id === id) || { id });
+  const favDecks = (favs.decks || []).map((id) => {
+    const d = deckMeta.find((x) => x.id === id) || { id };
+    return { ...d, image: officialImageFor({ name: d.key_cards?.[0] }) || d.image };
+  });
   const favSets = (favs.sets || []).map((code) => sets.find((s) => s.code === code) || { code, name: code });
-  const favCards = (favs.cards || []).map((id) => ({ id, ...(cardMeta(id) || {}) }));
+  const favCards = (favs.cards || []).map((id) => {
+    const m = cardMeta(id) || {};
+    return {
+      id,
+      ...m,
+      name: officialMetaFor({ name: m.name })?.name || m.name,
+      image: officialImageFor({ name: m.name }) || m.image,
+    };
+  });
 
   const empty = !favDecks.length && !favSets.length && !favCards.length;
 

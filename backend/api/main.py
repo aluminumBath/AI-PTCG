@@ -287,30 +287,45 @@ def new_game(req: NewGame):
         model_ids = {0: req.agent_a, 1: req.agent_b}
     gid = uuid.uuid4().hex[:12]
     SESSIONS[gid] = Session(engine, req.mode, agents, human_seat, model_ids)
+    ai_moves: list[dict] = []
     if req.mode == "human_vs_ai":
-        _advance_ai_until_human(SESSIONS[gid])
+        ai_moves = _advance_ai_until_human(SESSIONS[gid])
         _record_session_result(SESSIONS[gid])
     return {"game_id": gid, "seed": seed,
             "deck_a": deck_a_id, "deck_b": deck_b_id,
+            "ai_moves": ai_moves,
+            "opponent_read": _ai_read(SESSIONS[gid]) if req.mode == "human_vs_ai" else None,
             "state": _view(SESSIONS[gid])}
 
 
-def _advance_ai_until_human(sess: Session, guard_max: int = 500) -> None:
+def _advance_ai_until_human(sess: Session, guard_max: int = 500) -> list[dict]:
     """Let AI seats play until it's the human's turn or the game ends.
 
     Needed because the first player is decided by a coin flip — if the AI goes
     first, the human would otherwise be handed a board with no legal actions.
+    Returns the AI's moves this stretch, each with the acting agent's rationale,
+    so the Play view can show *why* the opponent did what it did.
     """
     eng = sess.engine
     guard = 0
+    moves: list[dict] = []
     while (not eng.state.is_over()
            and eng.state.current_player != sess.human_seat
            and guard < guard_max):
-        ai = sess.agents.get(eng.state.current_player)
+        seat = eng.state.current_player
+        ai = sess.agents.get(seat)
         if ai is None:
             break
-        eng.apply(ai.select(eng))
+        action = ai.select(eng)
+        rationale = getattr(ai, "last_explanation", "") or ""
+        eng.apply(action)
+        moves.append({
+            "agent": sess.model_ids.get(seat) if sess.model_ids else None,
+            "action": action.describe(),
+            "rationale": rationale,
+        })
         guard += 1
+    return moves
 
 
 def _view(sess: Session) -> dict:
@@ -370,6 +385,19 @@ def get_state(gid: str):
     return _view(sess)
 
 
+def _ai_read(sess: Session) -> Optional[dict]:
+    """The AI's read of the human opponent (archetype guess + optional neural
+    hand prediction), for the Play-vs-AI view."""
+    ai_seat = next(iter(sess.agents), None)
+    if ai_seat is None:
+        return None
+    from agents.mindreader_agent import read_opponent
+    agent = sess.agents.get(ai_seat)
+    return {"seat": ai_seat, "agent": sess.model_ids.get(ai_seat),
+            "hand_read": getattr(agent, "last_hand_read", None) or None,
+            **read_opponent(sess.engine, ai_seat)}
+
+
 @app.post("/api/game/{gid}/step")
 def step(gid: str):
     """Advance an AI-vs-AI game by a single ply."""
@@ -382,10 +410,24 @@ def step(gid: str):
     agent = sess.agents.get(eng.state.current_player)
     if agent is None:
         raise HTTPException(400, "no agent for current seat")
+    mover = eng.state.current_player
     action = agent.select(eng)
+    rationale = getattr(agent, "last_explanation", "") or ""
+    from agents.mindreader_agent import read_opponent
+    reads = {0: read_opponent(eng, 0), 1: read_opponent(eng, 1)}
+    hand_read = getattr(agent, "last_hand_read", None) or None
+    read_eval = getattr(agent, "last_read_eval", None) or None
     eng.apply(action)
     _record_session_result(sess)
-    return {"done": eng.state.is_over(), "last_action": action.describe(), "state": _view(sess)}
+    return {"done": eng.state.is_over(), "last_action": action.describe(),
+            "rationale": rationale,
+            "opponent_read": {"seat": mover,
+                              "agent": sess.model_ids.get(mover) if sess.model_ids else None,
+                              "hand_read": hand_read,
+                              "read_eval": read_eval,
+                              **reads[mover]},
+            "reads": reads,
+            "state": _view(sess)}
 
 
 @app.post("/api/game/{gid}/action")
@@ -404,9 +446,10 @@ def human_action(gid: str, req: ActionReq):
         raise HTTPException(400, "illegal action index")
     eng.apply(legal[req.index])
     # let the AI play until control returns to the human or the game ends
-    _advance_ai_until_human(sess)
+    ai_moves = _advance_ai_until_human(sess)
     _record_session_result(sess)
-    return {"done": eng.state.is_over(), "state": _view(sess)}
+    return {"done": eng.state.is_over(), "ai_moves": ai_moves,
+            "opponent_read": _ai_read(sess), "state": _view(sess)}
 
 
 @app.get("/api/training/metrics")
@@ -440,6 +483,68 @@ def training_metrics():
     except Exception as e:  # never 500 the dashboard; show the real reason
         return {"metrics": [], "note": f"Couldn't read {found}: {e}"}
     return {"metrics": _finite(data)}
+
+
+@app.get("/api/training/league")
+def training_league():
+    """League standings written by `rl.alphazero_train --league` (league.json)."""
+    import json
+    candidates = []
+    if os.environ.get("CKPT_DIR"):
+        candidates.append(os.path.join(os.environ["CKPT_DIR"], "league.json"))
+    candidates.append(os.path.join(_BACKEND_ROOT, "checkpoints", "league.json"))
+    candidates.append(os.path.join(os.getcwd(), "checkpoints", "league.json"))
+    found = next((p for p in candidates if os.path.isfile(p)), None)
+    if not found:
+        return {"members": []}
+    try:
+        with open(found, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except json.JSONDecodeError:
+        return {"members": [], "note": "League file is mid-write — refresh in a moment."}
+    except Exception as e:
+        return {"members": [], "note": f"Couldn't read {found}: {e}"}
+    return {"members": data.get("members", []), "update": data.get("update")}
+
+
+@app.get("/api/training/opponent")
+def training_opponent():
+    """Opponent-model training metrics (opponent_metrics.json)."""
+    import json
+    candidates = []
+    if os.environ.get("CKPT_DIR"):
+        candidates.append(os.path.join(os.environ["CKPT_DIR"], "opponent_metrics.json"))
+    candidates.append(os.path.join(_BACKEND_ROOT, "checkpoints", "opponent_metrics.json"))
+    candidates.append(os.path.join(os.getcwd(), "checkpoints", "opponent_metrics.json"))
+    found = next((p for p in candidates if os.path.isfile(p)), None)
+    if not found:
+        return {"metrics": []}
+    try:
+        with open(found, encoding="utf-8") as fh:
+            return {"metrics": json.load(fh)}
+    except json.JSONDecodeError:
+        return {"metrics": [], "note": "Opponent-model metrics file is mid-write — refresh shortly."}
+    except Exception as e:
+        return {"metrics": [], "note": f"Couldn't read {found}: {e}"}
+
+
+@app.get("/api/training/policy_eval")
+def training_policy_eval():
+    """Deployed-agent eval vs heuristic (policy_eval.json) — the honest policy signal."""
+    import json
+    candidates = []
+    if os.environ.get("CKPT_DIR"):
+        candidates.append(os.path.join(os.environ["CKPT_DIR"], "policy_eval.json"))
+    candidates.append(os.path.join(_BACKEND_ROOT, "checkpoints", "policy_eval.json"))
+    candidates.append(os.path.join(os.getcwd(), "checkpoints", "policy_eval.json"))
+    found = next((p for p in candidates if os.path.isfile(p)), None)
+    if not found:
+        return {}
+    try:
+        with open(found, encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
 
 
 @app.get("/api/cards/search")
@@ -486,6 +591,91 @@ def sources():
              "url": "https://www.pokemon.com/us/pokedex"},
         ],
     }
+
+
+# --------------------------------------------------------------------------- #
+# Official competition card data served from the database (loaded via
+# tools/load_official_data.py) — lets the large CSV/PDF/images leave the repo.
+# --------------------------------------------------------------------------- #
+@app.get("/api/official/status")
+def official_status():
+    from db.database import SessionLocal
+    from db.models import OfficialCard, OfficialCardImage
+    db = SessionLocal()
+    try:
+        return {"cards": db.query(OfficialCard).count(),
+                "images": db.query(OfficialCardImage).count()}
+    except Exception:
+        return {"cards": 0, "images": 0}
+    finally:
+        db.close()
+
+
+@app.get("/api/official/cards")
+def official_cards(q: str = "", limit: int = 5000):
+    from sqlalchemy import func, or_
+    from db.database import SessionLocal
+    from db.models import OfficialCard, OfficialCardImage
+    db = SessionLocal()
+    try:
+        query = db.query(OfficialCard)
+        if q:
+            like = f"%{q.lower()}%"
+            query = query.filter(or_(func.lower(OfficialCard.name).like(like),
+                                     func.lower(OfficialCard.expansion).like(like)))
+        rows = query.order_by(OfficialCard.card_id).limit(max(1, min(8000, limit))).all()
+        have = {cid for (cid,) in db.query(OfficialCardImage.card_id).all()}
+        return {"cards": [{
+            "card_id": r.card_id, "name": r.name, "expansion": r.expansion,
+            "collection_no": r.collection_no, "stage": r.stage, "category": r.category,
+            "hp": r.hp, "type": r.type, "has_image": r.card_id in have,
+        } for r in rows]}
+    except Exception:
+        return {"cards": []}
+    finally:
+        db.close()
+
+
+@app.get("/api/official/cards/{card_id}")
+def official_card(card_id: int):
+    import json as _json
+    from db.database import SessionLocal
+    from db.models import OfficialCard, OfficialCardImage
+    db = SessionLocal()
+    try:
+        r = db.get(OfficialCard, card_id)
+        if not r:
+            raise HTTPException(404, "card not found")
+        has_image = db.get(OfficialCardImage, card_id) is not None
+        try:
+            moves = _json.loads(r.moves) if r.moves else []
+        except Exception:
+            moves = []
+        return {
+            "card_id": r.card_id, "name": r.name, "expansion": r.expansion,
+            "collection_no": r.collection_no, "stage": r.stage, "category": r.category,
+            "hp": r.hp, "type": r.type, "weakness": r.weakness,
+            "resistance": r.resistance, "retreat": r.retreat,
+            "moves": moves, "has_image": has_image,
+        }
+    finally:
+        db.close()
+
+
+@app.get("/api/official/cards/{card_id}/image")
+def official_card_image(card_id: int):
+    from fastapi.responses import Response
+    from db.database import SessionLocal
+    from db.models import OfficialCardImage
+    db = SessionLocal()
+    try:
+        img = db.get(OfficialCardImage, card_id)
+        if not img or not img.data:
+            raise HTTPException(404, "image not found")
+        return Response(content=img.data, media_type=img.mime or "image/png",
+                        headers={"Cache-Control": "public, max-age=86400"})
+    finally:
+        db.close()
 
 
 # --------------------------------------------------------------------------- #
@@ -1317,3 +1507,38 @@ def favorites_remove(kind: str, ref_id: str,
      .filter_by(user_id=user.id, kind=kind, ref_id=ref_id).delete())
     db.commit()
     return _favorites_for(user, db)
+
+
+# --------------------------------------------------------------------------- #
+# Optional: serve the built frontend from this same process (single origin),
+# so a self-hosted deploy can sit behind one Cloudflare Tunnel with no CORS.
+# Enable by setting SERVE_FRONTEND=1 (uses ../frontend/dist) or to a dist path.
+# Unset on Render/CI, so this stays a no-op there.
+# --------------------------------------------------------------------------- #
+def _mount_frontend() -> None:
+    val = os.environ.get("SERVE_FRONTEND")
+    if not val:
+        return
+    dist = (os.path.join(_BACKEND_ROOT, "..", "frontend", "dist")
+            if val in ("1", "true", "True", "yes") else val)
+    dist = os.path.abspath(dist)
+    index = os.path.join(dist, "index.html")
+    if not os.path.isfile(index):
+        print(f"[serve-frontend] no build at {dist}; skipping (run `npm run build`).")
+        return
+    from fastapi.responses import FileResponse
+
+    # Registered last, so every /api/* route above still takes precedence.
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa(full_path: str):
+        if full_path.startswith("api") or full_path in ("docs", "redoc", "openapi.json"):
+            raise HTTPException(404, "not found")
+        target = os.path.join(dist, full_path)
+        if full_path and os.path.isfile(target):
+            return FileResponse(target)         # assets, config.js, pokeball.png…
+        return FileResponse(index)              # SPA fallback for client routes
+
+    print(f"[serve-frontend] serving SPA from {dist}")
+
+
+_mount_frontend()

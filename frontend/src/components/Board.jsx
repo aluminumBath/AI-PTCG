@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { officialImageFor, useOfficial } from '../officialData';
 
 const TYPE_VAR = {
   Fire: 'var(--fire)', Water: 'var(--water)', Grass: 'var(--grass)',
@@ -32,12 +33,13 @@ function Poke({ poke, isActive }) {
   }
   const name = poke.name.replace(/ ex$/, '');
   const isEx = poke.rule_box;
-  const hasArt = !!poke.image;
+  const img = officialImageFor(poke) || poke.image;
+  const hasArt = !!img;
   return (
     <div className={`card-poke ${isActive ? 'act' : ''} ${hasArt ? 'has-art' : ''}`}>
       {hasArt && (
         <div className="art-wrap">
-          <CardArt src={poke.image} alt={poke.name} />
+          <CardArt src={img} alt={poke.name} />
           {poke.status?.length > 0 && (
             <div className="art-status">
               {poke.status.map((s) => <span key={s} className={`status ${s}`}>{s}</span>)}
@@ -70,6 +72,7 @@ function Poke({ poke, isActive }) {
 }
 
 export default function Board({ player, activeTurn, flip }) {
+  useOfficial();  // re-render when the official-data toggle flips / loads
   const accent = sideAccent(player);
   const taken = player.prizes_taken || 0;
   return (

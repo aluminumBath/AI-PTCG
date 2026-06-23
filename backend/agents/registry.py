@@ -97,6 +97,73 @@ def _ismcts_factory(iterations: int = 160):
     return make
 
 
+def _closer_factory():
+    def make(**_):
+        from .closer_agent import ClosingAgent
+        return ClosingAgent(HeuristicAgent())
+    return make
+
+
+def _momentum_factory():
+    def make(**_):
+        from .momentum_agent import MomentumAgent
+        return MomentumAgent()
+    return make
+
+
+def _mindreader_factory():
+    def make(**_):
+        from .mindreader_agent import MindReaderAgent
+        return MindReaderAgent()
+    return make
+
+
+def _coach_factory():
+    def make(**_):
+        from .coach_agent import CoachAgent
+        return CoachAgent()
+    return make
+
+
+def _coach_search_factory():
+    def make(**_):
+        from .coach_search_agent import SearchCoachAgent
+        return SearchCoachAgent()
+    return make
+
+
+def _alphazero_factory(iterations: int = 300):
+    def make(checkpoint: str | None = None, **_):
+        try:
+            from .alphazero_agent import AlphaZeroAgent
+            return AlphaZeroAgent(checkpoint=checkpoint, iterations=iterations)
+        except Exception:
+            from .mcts_agent import MCTSAgent
+            return MCTSAgent(iterations=max(200, iterations // 2))
+    return make
+
+
+def _closer_deep_factory():
+    def make(**_):
+        from .closer_agent import ClosingAgent
+        return ClosingAgent(max_depth=5, budget=6000, trials=5)
+    return make
+
+
+def _neural_ismcts_factory(iterations: int = 200):
+    def make(**_):
+        try:
+            from .neural_ismcts_agent import NeuralISMCTSAgent
+            base = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                "checkpoints", "opponent_model.pt")
+            mc = os.environ.get("OPPONENT_MODEL", base)
+            return NeuralISMCTSAgent(model_checkpoint=mc, iterations=iterations)
+        except Exception:
+            from .ismcts_agent import ISMCTSAgent
+            return ISMCTSAgent(iterations=iterations)
+    return make
+
+
 # id -> metadata + factory. ``family`` groups algorithms for the UI.
 REGISTRY: dict[str, dict] = {
     "random": {
@@ -202,6 +269,90 @@ REGISTRY: dict[str, dict] = {
         "family": "ensemble",
         "description": "Votes among the current top-3 models on the scoreboard leaderboard, re-resolving whenever it changes.",
         "factory": _meta_top3_factory(),
+        "speed": "slow",
+    },
+    "closer": {
+        "label": "Closer (lethal solver)",
+        "family": "hybrid",
+        "description": "Wraps a base policy with an exhaustive, RNG-verified search for a winning line this turn — so it never misses a (possibly multi-step) lethal. Defers to the Heuristic when none exists.",
+        "factory": _closer_factory(),
+        "speed": "fast",
+    },
+    "momentum": {
+        "label": "Momentum (risk-aware)",
+        "family": "adaptive",
+        "description": "Reads the prize race and modulates variance: aggressive and swingy when behind to maximise win probability, safe and controlling when ahead to protect the lead.",
+        "factory": _momentum_factory(),
+        "speed": "fast",
+    },
+    "mindreader": {
+        "label": "Mind-reader (opponent inference)",
+        "family": "adaptive",
+        "description": "Infers the opponent's archetype from public play (a posterior over the 26 decks), then switches to the matchup-favoured counter-plan. Never misses lethal (runs through the Closer).",
+        "factory": _mindreader_factory(),
+        "speed": "fast",
+    },
+    "coach": {
+        "label": "Coach (LLM-advised)",
+        "family": "adaptive",
+        "description": "Asks a language model to reason about the board and pick a move with a natural-language rationale (validated against the legal actions). Falls back to the Heuristic offline — e.g. on Kaggle — so it always plays.",
+        "factory": _coach_factory(),
+        "speed": "slow",
+    },
+    "coach_search": {
+        "label": "Coach + search (propose-verify)",
+        "family": "adaptive",
+        "description": "An LLM proposes a shortlist of candidate moves; the engine simulates each and plays the one that actually scores best, with the model's reasoning as the rationale. Offline it degrades to a full one-ply search, never a guess. Never misses lethal.",
+        "factory": _coach_search_factory(),
+        "speed": "slow",
+    },
+    "alphazero": {
+        "label": "AlphaZero (PUCT + net)",
+        "family": "hybrid",
+        "description": "Best-first PUCT tree search guided by the trained policy (action priors) and value head (leaf evaluation) — no random rollouts. Runs a guaranteed-lethal check first. Falls back to MCTS without a checkpoint.",
+        "factory": _alphazero_factory(300),
+        "speed": "slow",
+    },
+    "alphazero_deep": {
+        "label": "AlphaZero — deep (900 sims)",
+        "family": "hybrid",
+        "description": "The AlphaZero PUCT agent with a much larger per-move simulation budget — practical when self-hosting (no 10-minute match cap). Stronger but slower.",
+        "factory": _alphazero_factory(900),
+        "speed": "slow",
+    },
+    "mcts_deep": {
+        "label": "MCTS — deep (1200 iters)",
+        "family": "search",
+        "description": "Plain UCT MCTS with a much larger iteration budget for self-hosted, time-unconstrained play.",
+        "factory": _mcts_factory(1200),
+        "speed": "slow",
+    },
+    "ismcts_deep": {
+        "label": "ISMCTS — deep (3500 iters)",
+        "family": "search",
+        "description": "Information-Set MCTS with a much larger iteration budget — stronger hidden-information play when there's no time limit.",
+        "factory": _ismcts_factory(3500),
+        "speed": "slow",
+    },
+    "rl_mcts_deep": {
+        "label": "RL-MCTS — deep (1200 iters)",
+        "family": "hybrid",
+        "description": "Value-net-guided MCTS with a much larger iteration budget; falls back to deep MCTS without a checkpoint.",
+        "factory": _rl_mcts_factory(1200),
+        "speed": "slow",
+    },
+    "closer_deep": {
+        "label": "Closer — deep (depth 5)",
+        "family": "hybrid",
+        "description": "The lethal solver with a deeper, larger search (depth 5, budget 6000, 6 verify seeds) for finding longer forced wins when time allows.",
+        "factory": _closer_deep_factory(),
+        "speed": "slow",
+    },
+    "neural_ismcts": {
+        "label": "Neural ISMCTS (opponent model)",
+        "family": "hybrid",
+        "description": "ISMCTS whose determinizations are weighted by a learned opponent model predicting which cards the opponent holds — a learned 'deep mind-reader'. Falls back to uniform ISMCTS when no model is trained.",
+        "factory": _neural_ismcts_factory(200),
         "speed": "slow",
     },
 }

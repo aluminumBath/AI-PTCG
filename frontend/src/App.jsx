@@ -47,8 +47,8 @@ function OfficialDataToggle() {
     : off.loading
       ? 'loading…'
       : off.ready
-        ? `${off.count} cards loaded`
-        : 'reads /public/assets';
+        ? `${off.count} cards · ${off.source === 'database' ? 'from DB' : 'from files'}`
+        : 'DB or public/assets';
   return (
     <div className="official-toggle">
       <button

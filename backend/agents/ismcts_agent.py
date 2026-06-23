@@ -65,6 +65,11 @@ class ISMCTSAgent(MCTSAgent):
     def _key(a):
         return (a.type, a.hand_index, a.source_uid, a.target_uid, a.sub_index)
 
+    def _determinize(self, engine: GameEngine, observer: int) -> GameEngine:
+        """Sample a hidden state consistent with what ``observer`` sees.
+        Subclasses (e.g. the neural opponent model) can bias this."""
+        return determinize(engine, observer, self.rng)
+
     def select(self, engine: GameEngine):
         root_actions = engine.legal_actions()
         if len(root_actions) == 1:
@@ -78,7 +83,7 @@ class ISMCTSAgent(MCTSAgent):
         agg: dict = {}
         iters_per = max(20, self.iterations // self.determinizations)
         for _ in range(self.determinizations):
-            base = determinize(engine, root_player, self.rng)
+            base = self._determinize(engine, root_player)
             root = _Node(player_to_move=root_player, untried=list(base.legal_actions()))
             for _ in range(iters_per):
                 sim = base.clone()

@@ -57,6 +57,17 @@ export const api = {
   mpDatasetUrl: () => `${BASE}/api/multiplayer/dataset`,
   mpRematch: (mid, token, swap = false) =>
     req(`/api/multiplayer/${mid}/rematch?token=${encodeURIComponent(token || '')}&swap=${swap ? 'true' : 'false'}`, { method: 'POST' }),
+  // --- Kaggle exports (direct download URLs) ---
+  exportSimUrl: (deck, agent) =>
+    `${BASE}/api/competition/export/sim?deck=${encodeURIComponent(deck)}&agent=${encodeURIComponent(agent)}`,
+  exportStrategyUrl: (deck, agent, title = '', subtitle = '') =>
+    `${BASE}/api/competition/export/strategy?deck=${encodeURIComponent(deck)}&agent=${encodeURIComponent(agent)}`
+    + `&title=${encodeURIComponent(title)}&subtitle=${encodeURIComponent(subtitle)}`,
+  // --- result validation + consistency (mean ± std) ---
+  tournamentValidate: (jobId) => req(`/api/tournament/${jobId}/validate`),
+  consistencyRun: (body) => req('/api/validate/consistency', { method: 'POST', body }),
+  consistencyStatus: (jobId) => req(`/api/validate/consistency/${jobId}`),
+  cancelConsistency: (jobId) => req(`/api/validate/consistency/${jobId}/cancel`, { method: 'POST' }),
   // --- favorites (per-user) ---
   favorites: () => req('/api/favorites', { auth: true }),
   addFavorite: (kind, ref_id) => req('/api/favorites', { method: 'POST', body: { kind, ref_id }, auth: true }),
@@ -80,8 +91,13 @@ export const api = {
   myGames: () => req('/api/me/games', { auth: true }),
 
   metrics: () => req('/api/training/metrics'),
+  league: () => req('/api/training/league'),
+  opponentMetrics: () => req('/api/training/opponent'),
+  policyEval: () => req('/api/training/policy_eval'),
   cards: (q, page = 1) => req(`/api/cards/search?q=${encodeURIComponent(q)}&page=${page}`),
   cardsCatalog: () => req('/api/cards/catalog'),
+  officialCard: (id) => req(`/api/official/cards/${id}`),
+  officialStatus: () => req('/api/official/status'),
   rules: () => req('/api/rules'),
   sources: () => req('/api/sources'),
   competitionInfo: () => req('/api/competition/info'),

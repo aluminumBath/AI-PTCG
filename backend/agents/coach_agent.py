@@ -99,6 +99,11 @@ class CoachAgent(Agent):
 
     # -- LLM call (best-effort) --------------------------------------------- #
     def _ask_llm(self, prompt: str) -> Optional[str]:
+        # Hard offline switch for competition submissions: PTCG_OFFLINE=1 disables
+        # all network use regardless of whether a key happens to be present, so the
+        # agent is provably offline on Kaggle. (It also no-ops without a key.)
+        if os.environ.get("PTCG_OFFLINE"):
+            return None
         key = os.environ.get("ANTHROPIC_API_KEY")
         if not key:
             return None

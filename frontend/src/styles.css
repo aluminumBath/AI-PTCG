@@ -203,6 +203,21 @@ label.field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; 
   animation: boot-slide 1.25s ease-in-out infinite; }
 @keyframes boot-slide { 0% { transform: translateX(-130%); } 100% { transform: translateX(330%); } }
 .boot-elapsed { margin-top: 12px; font-family: var(--mono); font-size: 11px; color: var(--faint); }
+
+/* ---------------- Official-data sidebar toggle ---------------- */
+.official-toggle { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin: 0 0 8px;
+  border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.02); }
+.official-toggle .switch { position: relative; width: 38px; height: 22px; border-radius: 999px; flex: 0 0 auto;
+  border: 1px solid var(--line-strong); background: rgba(255,255,255,.06); cursor: pointer; transition: background .15s, border-color .15s; }
+.official-toggle .switch .knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--muted); transition: transform .15s, background .15s; }
+.official-toggle .switch.on { background: var(--accent-soft); border-color: var(--accent); }
+.official-toggle .switch.on .knob { transform: translateX(16px); background: var(--accent); }
+.official-meta { min-width: 0; }
+.official-title { font-size: 12.5px; font-weight: 600; }
+.official-status { font-size: 10.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.official-status.bad { color: var(--warn, #e0a84e); }
+.official-status a { color: var(--muted); }
 .pill { font-family: var(--mono); font-size: 11px; padding: 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
 
 /* ---------------- Battle board ---------------- */
