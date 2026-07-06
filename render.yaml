@@ -36,6 +36,11 @@ services:
       # Optional: raises pokemontcg.io rate limits.
       - key: POKEMONTCG_API_KEY
         sync: false
+      # Optional CORS allowlist (comma-separated). Unset ⇒ "*" (open). For a
+      # locked-down deploy set the frontends that call this API, e.g.
+      # https://aluminumbath.github.io,https://tcg-frontend-kisd.onrender.com
+      - key: ALLOWED_ORIGINS
+        sync: false
 
   - type: web
     name: tcg-frontend

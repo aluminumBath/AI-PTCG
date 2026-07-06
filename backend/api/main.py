@@ -55,9 +55,17 @@ class SafeJSONResponse(_JSONResponse):
 
 app = FastAPI(title="Pokémon TCG AI Arena", version="1.0",
               default_response_class=SafeJSONResponse)
+# CORS origins. Defaults to "*" (open) so local/dev just works. In production set
+# ALLOWED_ORIGINS to a comma-separated allowlist, e.g.
+#   ALLOWED_ORIGINS=https://aluminumbath.github.io,https://tcg-frontend-kisd.onrender.com
+_allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "*").strip()
+_allow_origins = (
+    ["*"] if _allowed_origins_env in ("", "*")
+    else [o.strip() for o in _allowed_origins_env.split(",") if o.strip()]
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
+    allow_origins=_allow_origins, allow_methods=["*"], allow_headers=["*"],
 )
 app.include_router(auth_router)
 
