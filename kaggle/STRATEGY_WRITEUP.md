@@ -8,10 +8,9 @@ deck. The agent does not follow a fixed script: on every turn it uses the
 engine's `search` API to look ahead over its own possible action sequences,
 plays each candidate line out to the end of the turn, and keeps the line whose
 resulting board scores highest under a hand-built value function. Across a
-gauntlet of 50+ rules-legal decks (five archetypes) it beats a strong card-aware
-heuristic **70.8%** of the time on the 15 tactical (aggro) decks where per-turn
-choices matter — and is safe everywhere, never once crashing across 380+ full
-games.
+50+ deck gauntlet (five archetypes) it beats a strong card-aware heuristic
+**70.8%** of the time on the 15 tactical (aggro) decks where per-turn choices
+matter — and never crashes across 320+ full games.
 
 The single most important design decision was upstream of any tuning: **making
 the agent actually interface with the real engine at all.**
@@ -126,8 +125,7 @@ than a long evolution chain.
 A single-deck mirror also hides the aggro edge (it shrinks to ~56%, because both
 sides share the same rollout policy and draws dominate); a **diverse field is
 what reveals it**. Because real opponents rarely play as cleanly as our rollout
-assumes, the aggro figure is if anything conservative — there is more room for
-lookahead to matter against imperfect play, not less.
+assumes, the aggro figure is if anything conservative.
 
 ![Figure 1: search-agent win-rate versus the heuristic on each of the 15 aggro gauntlet decks; every bar is at or above 50%.](figures/fig1_agent_skill.png)
 
@@ -222,6 +220,5 @@ safety fallback.
 
 ---
 
-*Media note: all images in the gallery must use only license-compliant Pokémon
-Elements provided by the organizers; the figure placeholders above are to be
-rendered from our own result data and compliant assets only.*
+*Media note: all gallery images use only license-compliant Pokémon Elements
+provided by the organizers; the figures above are rendered from our own result data.*
