@@ -1,0 +1,7 @@
+# Official competition engine + built submission — licensed for competition use
+# only (per Kaggle PTCG AI Battle rules). Keep local; do NOT commit/redistribute,
+# especially since this repo has a public GitHub Pages deploy. Rebuild locally with
+# `python swap_engine.py /path/to/official/cg`.
+ptcg-sim-submission/cg/
+ptcg-sim-submission/submission.tar.gz
+ptcg-sim-submission/cg.sample.bak/
